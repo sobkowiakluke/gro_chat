@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h1>Chat</h1>
+
+<div id="chat-box" class="chat-box"></div>
+
+<div class="chat-input">
+    <textarea id="msg"></textarea>
+    <button onclick="sendMsg()">Wyślij</button>
+</div>
+
+<script>
+async function loadModels() {
+    const select = document.getElementById("modelSelect");
+
+    try {
+        const res = await fetch("/models");
+        const models = await res.json();
+
+        select.innerHTML = "";
+
+        models.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m;
+            select.appendChild(opt);
+        });
+
+    } catch (err) {
+        console.error("Model load error:", err);
+    }
+    if (m.includes("llama-3.1-8b-instant")) {
+    opt.selected = true;
+    }
+}
+
+
+
+document.addEventListener("DOMContentLoaded", loadModels);
+async function sendMsg() {
+    const input = document.getElementById("msg");
+    const box = document.getElementById("chat-box");
+
+    const message = input.value.trim();
+    if (!message) return;
+
+    input.value = "";
+
+    box.innerHTML += `<div class="user">Ty: ${message}</div>`;
+
+    const res = await fetch("/chat", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({message})
+    });
+
+    const data = await res.json();
+
+    box.innerHTML += `<div class="bot">AI: ${data.reply}</div>`;
+    box.scrollTop = box.scrollHeight;
+}
+
+/* ENTER / SHIFT+ENTER */
+document.addEventListener("DOMContentLoaded", () => {
+    const input = document.getElementById("msg");
+
+    input.addEventListener("keydown", function(e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();   // blokuje nową linię
+            sendMsg();
+        }
+        // Shift+Enter → domyślne zachowanie (nowa linia)
+    });
+});
+</script>
+{% endblock %}

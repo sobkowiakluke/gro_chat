@@ -1,0 +1,250 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: system-ui;
+}
+
+body {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #0f172a; /* tło główne (ciemny granat) */
+    color: #e5e7eb;      /* jasny tekst */
+}
+
+/* HEADER */
+.header {
+    height: 60px;
+    background: #020617; /* prawie czarny */
+    color: #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid #1e293b;
+}
+
+/* MAIN LAYOUT */
+.container {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* SIDEBAR */
+.sidebar {
+    width: 220px;
+    background: #020617;
+    color: #cbd5f5;
+    padding: 20px;
+    border-right: 1px solid #1e293b;
+}
+
+.sidebar ul {
+    list-style: none;
+}
+
+.sidebar li {
+    margin-bottom: 10px;
+}
+
+.sidebar a {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 6px;
+    color: #cbd5f5;
+    text-decoration: none;
+    transition: background 0.2s, color 0.2s;
+}
+
+.sidebar a:hover {
+    background: #1e293b;
+    color: #ffffff;
+}
+
+/* CONTENT */
+.content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+/* Nagłówki i tekst */
+h1, h2, h3 {
+    color: #f1f5f9;
+    margin-bottom: 10px;
+}
+
+p {
+    color: #cbd5f5;
+}
+
+/* Scrollbar (opcjonalnie, działa w Chromium) */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #020617;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+}
+/* USER BOX W HEADERZE */
+.user-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* "KOŁO" USERA */
+.user-circle {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #22c55e; /* zielony status */
+    box-shadow: 0 0 6px #22c55e55;
+}
+
+/* NAZWA USERA */
+.user-name {
+    font-size: 14px;
+    color: #cbd5f5;
+}
+
+/* PRZYCISK WYLOGUJ */
+.logout-btn {
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #e5e7eb;
+    background: #1e293b;
+    border: 1px solid #334155;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.logout-btn:hover {
+    background: #334155;
+}
+
+.logout-btn:active {
+    transform: scale(0.97);
+}
+.chat-box {
+    height: 60vh;
+    overflow-y: auto;
+    background: #020617;
+    border: 1px solid #1e293b;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.chat-input {
+    display: flex;
+    gap: 10px;
+}
+
+.chat-input input {
+    flex: 1;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #e5e7eb;
+}
+
+.chat-input button {
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: white;
+    cursor: pointer;
+}
+
+.chat-input button:hover {
+    background: #334155;
+}
+
+.user {
+    color: #93c5fd;
+    margin: 5px 0;
+}
+
+.bot {
+    color: #a7f3d0;
+    margin: 5px 0;
+}
+#msg {
+    width: 100%;
+    min-height: 60px;
+    max-height: 200px;
+
+    resize: vertical;
+
+    padding: 10px 12px;
+    border-radius: 8px;
+
+    background: #0f172a;        /* spójne z content */
+    color: #e5e7eb;             /* jasny tekst */
+
+    border: 1px solid #334155;  /* subtelna ramka */
+
+    outline: none;
+
+    font-size: 14px;
+    line-height: 1.4;
+
+    transition: border 0.2s, background 0.2s;
+}
+
+#msg:focus {
+    border-color: #3b82f6;      /* delikatny akcent */
+    background: #0b1220;
+}
+
+/* placeholder */
+#msg::placeholder {
+    color: #64748b;
+}
+
+/* scroll wewnątrz textarea */
+#msg::-webkit-scrollbar {
+    width: 6px;
+}
+
+#msg::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+}
+
+#msg::-webkit-scrollbar-track {
+    background: transparent;
+}
+#modelSelect {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+
+    background: #0f172a;
+    color: #e5e7eb;
+
+    border: 1px solid #334155;
+    border-radius: 6px;
+
+    outline: none;
+    font-size: 13px;
+}
+
+#modelSelect:focus {
+    border-color: #3b82f6;
+}
