@@ -126,8 +126,9 @@ def chat():
     user_message = data.get("message", "")
     model = data.get("model", "llama-3.1-8b-instant")
     context = data.get("context", "")
+    history = data.get("history", [])
 
-    system_prompt = "Jesteś pomocnym asystentem programistycznym. Odpowiadaj krótko i konkretnie. Zawsze zapisuj kod w blokach: ```python kod```"
+    system_prompt = "Jesteś pomocnym asystentem programistycznym. Odpowiadaj krótko i konkretnie."
 
     print("\n" + "="*60)
     print("=== GROQ REQUEST ===")
@@ -135,6 +136,11 @@ def chat():
     print("SYSTEM PROMPT:", system_prompt)
     print("USER MESSAGE:", user_message)
     print("CONTEXT:", context)
+
+    print("\n=== HISTORY FROM FRONTEND ===")
+    for h in history:
+        print(h)
+
     print("="*60)
 
     try:
@@ -142,15 +148,19 @@ def chat():
             {"role": "system", "content": system_prompt}
         ]
 
+        # context jako dodatkowy system
         if context:
             messages.append({
                 "role": "system",
-                "content": f"""KONTEKST (kod / pliki / dane wejściowe):
-        {context}
-
-        Użyj tego kontekstu do odpowiedzi jeśli jest istotny."""
+                "content": f"KONTEKST:\n{context}"
             })
 
+        # historia
+        for msg in history:
+            if msg.get("role") in ["user", "assistant"]:
+                messages.append(msg)
+
+        # aktualna wiadomość (NA KOŃCU!)
         messages.append({
             "role": "user",
             "content": user_message
@@ -183,7 +193,6 @@ def chat():
         return jsonify({
             "reply": "Błąd API Groq (sprawdź konsolę serwera)."
         }), 500
-
 
 # ======================
 # MODELS

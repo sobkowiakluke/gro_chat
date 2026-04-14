@@ -20,6 +20,7 @@
 /* =======================
    MODELE
 ======================= */
+let chatHistory = [];
 async function loadModels() {
     const select = document.getElementById("modelSelect");
 
@@ -102,16 +103,28 @@ async function sendMsg() {
             body: JSON.stringify({
                 message: message,
                 model: model,
-                context: context
+                context: context,
+                history: chatHistory.slice(-10) // BEZ aktualnej wiadomości
             })
         });
 
-        const data = await res.json();  // ✅ NAJPIERW
+        const data = await res.json();
 
-        const formatted = formatReply(data.reply);  // ✅ POTEM
+        const formatted = formatReply(data.reply);
 
         box.innerHTML += `<div class="bot">${formatted}</div>`;
         box.scrollTop = box.scrollHeight;
+
+        // ✅ dopiero TERAZ zapisujemy historię
+        chatHistory.push({
+            role: "user",
+            content: message
+        });
+
+        chatHistory.push({
+            role: "assistant",
+            content: data.reply
+        });
 
     } catch (err) {
         console.error("CHAT ERROR:", err);
