@@ -327,3 +327,37 @@ p {
 .git-tree {
     font-family: monospace;
 }
+.bot {
+    background: #1e293b;
+    padding: 12px;
+    border-radius: 10px;
+    margin-top: 10px;
+    color: #e2e8f0;
+    line-height: 1.5;
+}
+
+/* BLOK KODU */
+.bot pre {
+    background: #020617;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 10px 0;
+    border: 1px solid #1e293b;
+}
+
+.bot pre code {
+    font-family: monospace;
+    font-size: 13px;
+    color: #e2e8f0;
+}
+
+/* INLINE CODE */
+.inline-code {
+    background: #0f172a;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #38bdf8;
+}

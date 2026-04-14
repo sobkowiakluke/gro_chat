@@ -25,6 +25,32 @@ def load_user():
         return username, password_hash
 
 
+@app.route("/file")
+def get_file():
+    path = request.args.get("path")
+
+    try:
+        if not path:
+            return jsonify({"error": "Brak ścieżki"}), 400
+
+        # zabezpieczenie przed ../
+        safe_path = os.path.normpath(path)
+        if safe_path.startswith(".."):
+            return jsonify({"error": "Niedozwolona ścieżka"}), 403
+
+        with open(safe_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        return jsonify({
+            "path": safe_path,
+            "content": content
+        })
+
+    except Exception as e:
+        print("FILE READ ERROR:", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/", methods=["GET"])
 def home():
     if not session.get("logged_in"):
@@ -101,7 +127,7 @@ def chat():
     model = data.get("model", "llama-3.1-8b-instant")
     context = data.get("context", "")
 
-    system_prompt = "Jesteś pomocnym asystentem programistycznym. Odpowiadaj krótko i konkretnie."
+    system_prompt = "Jesteś pomocnym asystentem programistycznym. Odpowiadaj krótko i konkretnie. Zawsze zapisuj kod w blokach: ```python kod```"
 
     print("\n" + "="*60)
     print("=== GROQ REQUEST ===")
@@ -119,7 +145,10 @@ def chat():
         if context:
             messages.append({
                 "role": "system",
-                "content": f"KONTEKST:\n{context}"
+                "content": f"""KONTEKST (kod / pliki / dane wejściowe):
+        {context}
+
+        Użyj tego kontekstu do odpowiedzi jeśli jest istotny."""
             })
 
         messages.append({
