@@ -10,8 +10,14 @@
     <textarea id="msg"></textarea>
     <button onclick="sendMsg()">Wyślij</button>
 </div>
+<div class="context-box">
+    <label>Kontekst (dodawany do promptu)</label>
+    <textarea id="contextBox" placeholder="Wpisz dodatkowy kontekst..."></textarea>
+</div>
 
 <script>
+/* ===== MODEL LOADING ===== */
+let chatHistory = [];
 async function loadModels() {
     const select = document.getElementById("modelSelect");
 
@@ -21,30 +27,45 @@ async function loadModels() {
 
         select.innerHTML = "";
 
-        models.forEach(m => {
+        models.forEach((m, index) => {
             const opt = document.createElement("option");
             opt.value = m;
             opt.textContent = m;
+
+            // default selection
+            if (index === 0 || m.includes("llama-3.1-8b-instant")) {
+                opt.selected = true;
+            }
+
             select.appendChild(opt);
         });
 
     } catch (err) {
         console.error("Model load error:", err);
     }
-    if (m.includes("llama-3.1-8b-instant")) {
-    opt.selected = true;
-    }
 }
 
+/* ===== GET MODEL ===== */
+function getSelectedModel() {
+    const el = document.getElementById("modelSelect");
+    return el ? el.value : "llama-3.1-8b-instant";
+}
 
-
-document.addEventListener("DOMContentLoaded", loadModels);
+/* ===== CHAT ===== */
 async function sendMsg() {
     const input = document.getElementById("msg");
     const box = document.getElementById("chat-box");
 
+
     const message = input.value.trim();
+    const context = document.getElementById("contextBox").value.trim();
+    const model = getSelectedModel();
+
+
     if (!message) return;
+
+
+    const contextText = context ? context.value.trim() : "";
 
     input.value = "";
 
@@ -53,7 +74,11 @@ async function sendMsg() {
     const res = await fetch("/chat", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({message})
+        body: JSON.stringify({
+            message: message,
+            model: model,
+            context: context
+        })
     });
 
     const data = await res.json();
@@ -61,18 +86,96 @@ async function sendMsg() {
     box.innerHTML += `<div class="bot">AI: ${data.reply}</div>`;
     box.scrollTop = box.scrollHeight;
 }
-
-/* ENTER / SHIFT+ENTER */
+/* ===== ENTER HANDLER ===== */
 document.addEventListener("DOMContentLoaded", () => {
+    loadModels();
+
     const input = document.getElementById("msg");
 
     input.addEventListener("keydown", function(e) {
         if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();   // blokuje nową linię
+            e.preventDefault();
             sendMsg();
         }
-        // Shift+Enter → domyślne zachowanie (nowa linia)
     });
 });
+async function loadGitTree() {
+    const container = document.getElementById("gitTree");
+
+    try {
+        const res = await fetch("/git-tree");
+        const files = await res.json();
+
+        container.innerHTML = "";
+
+        files.forEach(file => {
+            const div = document.createElement("div");
+            div.className = "git-file";
+            div.textContent = file;
+
+            div.onclick = () => {
+                console.log("FILE CLICKED:", file);
+                // tutaj później podpinamy preview / load file content
+            };
+
+            container.appendChild(div);
+        });
+
+    } catch (err) {
+        console.error("Git tree error:", err);
+    }
+}
+
+document.addEventListener("DOMContentLoaded", loadGitTree);
+
+function renderTree(node, container) {
+    const ul = document.createElement("ul");
+
+    for (const key in node) {
+        if (key === "_files") continue;
+
+        const li = document.createElement("li");
+        li.textContent = "📁 " + key;
+
+        const childContainer = document.createElement("div");
+        childContainer.style.marginLeft = "15px";
+
+        renderTree(node[key], childContainer);
+
+        li.appendChild(childContainer);
+        ul.appendChild(li);
+    }
+
+    if (node._files) {
+        node._files.forEach(file => {
+            const li = document.createElement("li");
+            li.textContent = "📄 " + file;
+            li.className = "git-file";
+
+            li.onclick = () => {
+                console.log("FILE CLICK:", file);
+            };
+
+            ul.appendChild(li);
+        });
+    }
+
+    container.appendChild(ul);
+}
+
+async function loadGitTree() {
+    const container = document.getElementById("gitTree");
+
+    const res = await fetch("/git-tree");
+    const tree = await res.json();
+
+    container.innerHTML = "";
+    renderTree(tree, container);
+}
+
+document.addEventListener("DOMContentLoaded", loadGitTree);
+
+
 </script>
+
 {% endblock %}

@@ -248,3 +248,82 @@ p {
 #modelSelect:focus {
     border-color: #3b82f6;
 }
+.context-box {
+    margin-top: 15px;
+}
+
+.context-box label {
+    display: block;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 5px;
+}
+
+#contextBox {
+    width: 100%;
+    min-height: 100px;
+    max-height: 250px;
+
+    resize: vertical;
+
+    padding: 10px;
+    border-radius: 8px;
+
+    background: #0f172a;
+    color: #e5e7eb;
+
+    border: 1px solid #334155;
+
+    outline: none;
+
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+#contextBox:focus {
+    border-color: #3b82f6;
+}
+
+#contextBox::placeholder {
+    color: #64748b;
+}
+.git-tree {
+    margin-top: 15px;
+    font-size: 12px;
+    color: #cbd5e1;
+}
+
+.git-file {
+    padding: 3px 6px;
+    cursor: pointer;
+    border-radius: 4px;
+    color: #94a3b8;
+    font-family: monospace;
+}
+
+.git-file:hover {
+    background: #1e293b;
+    color: #e2e8f0;
+}
+.git-tree ul {
+    list-style: none;
+    padding-left: 12px;
+    margin: 0;
+}
+
+.git-tree li {
+    font-size: 12px;
+    color: #cbd5e1;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.git-tree li:hover {
+    background: #1e293b;
+    color: #fff;
+}
+
+.git-tree {
+    font-family: monospace;
+}
