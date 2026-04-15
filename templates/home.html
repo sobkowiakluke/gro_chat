@@ -125,6 +125,7 @@ async function sendMsg() {
             role: "assistant",
             content: data.reply
         });
+        contextEl.value = "";
 
     } catch (err) {
         console.error("CHAT ERROR:", err);
