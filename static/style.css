@@ -30,15 +30,17 @@ body {
     flex: 1;
     display: flex;
     overflow: hidden;
+
+    min-height: 0;   /* KLUCZOWE */
 }
 
 /* SIDEBAR */
 .sidebar {
-    width: 220px;
-    background: #020617;
-    color: #cbd5f5;
-    padding: 20px;
-    border-right: 1px solid #1e293b;
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
 .sidebar ul {
@@ -288,9 +290,10 @@ p {
     color: #64748b;
 }
 .git-tree {
-    margin-top: 15px;
-    font-size: 12px;
-    color: #cbd5e1;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .git-file {
@@ -360,4 +363,23 @@ p {
     font-family: monospace;
     font-size: 13px;
     color: #38bdf8;
+}
+.git-tree {
+    margin-top: 15px;
+    font-size: 12px;
+    color: #cbd5e1;
+
+    display: flex;
+    flex-direction: column;
+    flex: 1;                  /* zajmuje resztę miejsca sidebaru */
+    min-height: 0;            /* ważne dla scrolla w flexbox */
+}
+.git-tree-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+#gitTree {
+    display: block;
 }

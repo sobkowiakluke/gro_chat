@@ -154,43 +154,50 @@ document.addEventListener("DOMContentLoaded", () => {
    DRZEWO GIT
 ======================= */
 function renderTree(node, container, basePath = "") {
+
     const ul = document.createElement("ul");
 
+    // 📁 foldery
     for (const key in node) {
 
-        // 🔴 KLUCZOWE: ignoruj specjalne pola
-        if (key === "_files" || key === "_functions" || key === "_classes") continue;
+        if (key === "_files" || key === "_functions" || key === "_classes") {
+            continue;
+        }
 
         const li = document.createElement("li");
         li.textContent = "📁 " + key;
 
-        const childContainer = document.createElement("div");
-        childContainer.style.marginLeft = "15px";
+        const childUl = document.createElement("ul");
+        childUl.style.marginLeft = "15px";
 
-        renderTree(node[key], childContainer, basePath + key + "/");
+        renderTree(
+            node[key],
+            childUl,
+            basePath + key + "/"
+        );
 
-        li.appendChild(childContainer);
+        li.appendChild(childUl);
         ul.appendChild(li);
     }
 
     // 📄 pliki
     if (node._files) {
         node._files.forEach(file => {
+
             const li = document.createElement("li");
             li.textContent = "📄 " + file;
             li.className = "git-file";
 
-            const fullPath = basePath + file;
-
-            li.onclick = () => loadFile(fullPath);
+            li.onclick = () => loadFile(basePath + file);
 
             ul.appendChild(li);
         });
     }
 
-    // ƒ funkcje
+    // ƒ funkcje (opcjonalne)
     if (node._functions) {
         node._functions.forEach(fn => {
+
             const li = document.createElement("li");
             li.textContent = "ƒ " + fn.name;
             li.className = "git-func";
