@@ -157,7 +157,9 @@ function renderTree(node, container, basePath = "") {
     const ul = document.createElement("ul");
 
     for (const key in node) {
-        if (key === "_files") continue;
+
+        // 🔴 KLUCZOWE: ignoruj specjalne pola
+        if (key === "_files" || key === "_functions" || key === "_classes") continue;
 
         const li = document.createElement("li");
         li.textContent = "📁 " + key;
@@ -171,6 +173,7 @@ function renderTree(node, container, basePath = "") {
         ul.appendChild(li);
     }
 
+    // 📄 pliki
     if (node._files) {
         node._files.forEach(file => {
             const li = document.createElement("li");
@@ -185,9 +188,21 @@ function renderTree(node, container, basePath = "") {
         });
     }
 
+    // ƒ funkcje
+    if (node._functions) {
+        node._functions.forEach(fn => {
+            const li = document.createElement("li");
+            li.textContent = "ƒ " + fn.name;
+            li.className = "git-func";
+
+            li.onclick = () => loadFunction(fn.file, fn);
+
+            ul.appendChild(li);
+        });
+    }
+
     container.appendChild(ul);
 }
-
 async function loadGitTree() {
     const container = document.getElementById("gitTree");
 
