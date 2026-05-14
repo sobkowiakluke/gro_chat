@@ -1,3 +1,14 @@
+/* =========================
+   INIT STATE
+========================= */
+
+window.repoData = {};
+window.collapsedFolders = new Set();
+
+/* =========================
+   REFRESH TREE
+========================= */
+
 function refreshTree() {
 
     const container = document.getElementById("gitTree");
@@ -5,6 +16,10 @@ function refreshTree() {
 
     renderTree(window.repoData, container);
 }
+
+/* =========================
+   TREE RENDER
+========================= */
 
 function renderTree(node, container, basePath = "") {
 
@@ -20,9 +35,7 @@ function renderTree(node, container, basePath = "") {
             key === "_files" ||
             key === "_file_functions" ||
             key === "_file_classes"
-        ) {
-            continue;
-        }
+        ) continue;
 
         const folderPath = basePath + key;
 
@@ -116,6 +129,10 @@ function renderTree(node, container, basePath = "") {
     container.appendChild(ul);
 }
 
+/* =========================
+   LOAD TREE
+========================= */
+
 async function loadGitTree() {
 
     const container = document.getElementById("gitTree");
@@ -125,12 +142,35 @@ async function loadGitTree() {
         const res = await fetch("/git-tree");
         window.repoData = await res.json();
 
-        container.innerHTML = "";
+        /* =========================
+           AUTO COLLAPSE ALL
+        ========================= */
 
+        window.collapsedFolders = new Set();
+
+        (function collapseAll(node, basePath = "") {
+
+            for (const key in node) {
+
+                if (
+                    key === "_files" ||
+                    key === "_file_functions" ||
+                    key === "_file_classes"
+                ) continue;
+
+                const folderPath = basePath + key;
+
+                window.collapsedFolders.add(folderPath);
+
+                collapseAll(node[key], folderPath + "/");
+            }
+
+        })(window.repoData);
+
+        container.innerHTML = "";
         renderTree(window.repoData, container);
 
     } catch (err) {
-
         console.error("Git tree error:", err);
     }
 }
@@ -142,6 +182,11 @@ async function loadGitTree() {
 window.loadGitTree = loadGitTree;
 window.refreshTree = refreshTree;
 window.renderTree = renderTree;
+
+/* =========================
+   INIT
+========================= */
+
 document.addEventListener("DOMContentLoaded", () => {
     loadGitTree();
 });

@@ -9,14 +9,17 @@ body {
     height: 100vh;
     display: flex;
     flex-direction: column;
-    background: #0f172a; /* tło główne (ciemny granat) */
-    color: #e5e7eb;      /* jasny tekst */
+    background: #0f172a;
+    color: #e5e7eb;
 }
 
-/* HEADER */
+/* =========================
+   HEADER
+========================= */
+
 .header {
     height: 60px;
-    background: #020617; /* prawie czarny */
+    background: #020617;
     color: #e5e7eb;
     display: flex;
     align-items: center;
@@ -25,16 +28,21 @@ body {
     border-bottom: 1px solid #1e293b;
 }
 
-/* MAIN LAYOUT */
+/* =========================
+   LAYOUT
+========================= */
+
 .container {
     flex: 1;
     display: flex;
     overflow: hidden;
-
-    min-height: 0;   /* KLUCZOWE */
+    min-height: 0;
 }
 
-/* SIDEBAR */
+/* =========================
+   SIDEBAR
+========================= */
+
 .sidebar {
     width: 280px;
     display: flex;
@@ -43,36 +51,27 @@ body {
     overflow: hidden;
 }
 
-.sidebar ul {
-    list-style: none;
+/* WAŻNE: scroll tylko tu */
+.git-tree-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
 }
 
-.sidebar li {
-    margin-bottom: 10px;
-}
+/* =========================
+   CONTENT
+========================= */
 
-.sidebar a {
-    display: block;
-    padding: 8px 10px;
-    border-radius: 6px;
-    color: #cbd5f5;
-    text-decoration: none;
-    transition: background 0.2s, color 0.2s;
-}
-
-.sidebar a:hover {
-    background: #1e293b;
-    color: #ffffff;
-}
-
-/* CONTENT */
 .content {
     flex: 1;
     padding: 20px;
     overflow-y: auto;
 }
 
-/* Nagłówki i tekst */
+/* =========================
+   TEXT
+========================= */
+
 h1, h2, h3 {
     color: #f1f5f9;
     margin-bottom: 10px;
@@ -82,7 +81,10 @@ p {
     color: #cbd5f5;
 }
 
-/* Scrollbar (opcjonalnie, działa w Chromium) */
+/* =========================
+   SCROLLBAR
+========================= */
+
 ::-webkit-scrollbar {
     width: 8px;
 }
@@ -96,32 +98,29 @@ p {
     border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background: #334155;
-}
-/* USER BOX W HEADERZE */
+/* =========================
+   USER BOX
+========================= */
+
 .user-box {
     display: flex;
     align-items: center;
     gap: 12px;
 }
 
-/* "KOŁO" USERA */
 .user-circle {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #22c55e; /* zielony status */
+    background: #22c55e;
     box-shadow: 0 0 6px #22c55e55;
 }
 
-/* NAZWA USERA */
 .user-name {
     font-size: 14px;
     color: #cbd5f5;
 }
 
-/* PRZYCISK WYLOGUJ */
 .logout-btn {
     font-size: 13px;
     padding: 6px 10px;
@@ -130,16 +129,16 @@ p {
     color: #e5e7eb;
     background: #1e293b;
     border: 1px solid #334155;
-    transition: background 0.2s, transform 0.1s;
 }
 
 .logout-btn:hover {
     background: #334155;
 }
 
-.logout-btn:active {
-    transform: scale(0.97);
-}
+/* =========================
+   CHAT
+========================= */
+
 .chat-box {
     height: 60vh;
     overflow-y: auto;
@@ -170,12 +169,11 @@ p {
     border: 1px solid #334155;
     background: #1e293b;
     color: white;
-    cursor: pointer;
 }
 
-.chat-input button:hover {
-    background: #334155;
-}
+/* =========================
+   CHAT BUBBLES
+========================= */
 
 .user {
     color: #93c5fd;
@@ -183,55 +181,64 @@ p {
 }
 
 .bot {
-    color: #a7f3d0;
-    margin: 5px 0;
+    background: #1e293b;
+    padding: 12px;
+    border-radius: 10px;
+    margin-top: 10px;
+    color: #e2e8f0;
+    line-height: 1.5;
 }
+
+/* =========================
+   CODE
+========================= */
+
+.bot pre {
+    background: #020617;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 10px 0;
+    border: 1px solid #1e293b;
+}
+
+.bot pre code {
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.inline-code {
+    background: #0f172a;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #38bdf8;
+}
+
+/* =========================
+   INPUTS
+========================= */
+
 #msg {
     width: 100%;
     min-height: 60px;
     max-height: 200px;
-
     resize: vertical;
 
     padding: 10px 12px;
     border-radius: 8px;
 
-    background: #0f172a;        /* spójne z content */
-    color: #e5e7eb;             /* jasny tekst */
+    background: #0f172a;
+    color: #e5e7eb;
 
-    border: 1px solid #334155;  /* subtelna ramka */
-
-    outline: none;
-
-    font-size: 14px;
-    line-height: 1.4;
-
-    transition: border 0.2s, background 0.2s;
+    border: 1px solid #334155;
 }
 
-#msg:focus {
-    border-color: #3b82f6;      /* delikatny akcent */
-    background: #0b1220;
-}
+/* =========================
+   MODEL
+========================= */
 
-/* placeholder */
-#msg::placeholder {
-    color: #64748b;
-}
-
-/* scroll wewnątrz textarea */
-#msg::-webkit-scrollbar {
-    width: 6px;
-}
-
-#msg::-webkit-scrollbar-thumb {
-    background: #334155;
-    border-radius: 4px;
-}
-
-#msg::-webkit-scrollbar-track {
-    background: transparent;
-}
 #modelSelect {
     width: 100%;
     margin-top: 8px;
@@ -242,23 +249,19 @@ p {
 
     border: 1px solid #334155;
     border-radius: 6px;
-
-    outline: none;
-    font-size: 13px;
 }
 
-#modelSelect:focus {
-    border-color: #3b82f6;
-}
+/* =========================
+   CONTEXT
+========================= */
+
 .context-box {
     margin-top: 15px;
 }
 
 .context-box label {
-    display: block;
     font-size: 12px;
     color: #94a3b8;
-    margin-bottom: 5px;
 }
 
 #contextBox {
@@ -275,39 +278,23 @@ p {
     color: #e5e7eb;
 
     border: 1px solid #334155;
-
-    outline: none;
-
-    font-size: 13px;
-    line-height: 1.4;
 }
 
-#contextBox:focus {
-    border-color: #3b82f6;
-}
+/* =========================
+   GIT TREE (FIXED CLEAN)
+========================= */
 
-#contextBox::placeholder {
-    color: #64748b;
-}
 .git-tree {
     flex: 1;
-    min-height: 0;
     display: flex;
     flex-direction: column;
-}
+    min-height: 0;
 
-.git-file {
-    padding: 3px 6px;
-    cursor: pointer;
-    border-radius: 4px;
-    color: #94a3b8;
     font-family: monospace;
+    font-size: 13px;
+    color: #cbd5e1;
 }
 
-.git-file:hover {
-    background: #1e293b;
-    color: #e2e8f0;
-}
 .git-tree ul {
     list-style: none;
     padding-left: 12px;
@@ -315,71 +302,116 @@ p {
 }
 
 .git-tree li {
-    font-size: 12px;
-    color: #cbd5e1;
     cursor: pointer;
     padding: 2px 4px;
     border-radius: 4px;
 }
 
-.git-tree li:hover {
+/* folder */
+.folder-header {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* file */
+.git-file {
+    font-size: 15px;
+    font-weight: 500;
+    color: #94a3b8;
+}
+
+.git-file:hover {
     background: #1e293b;
-    color: #fff;
-}
-
-.git-tree {
-    font-family: monospace;
-}
-.bot {
-    background: #1e293b;
-    padding: 12px;
-    border-radius: 10px;
-    margin-top: 10px;
-    color: #e2e8f0;
-    line-height: 1.5;
-}
-
-/* BLOK KODU */
-.bot pre {
-    background: #020617;
-    padding: 12px;
-    border-radius: 8px;
-    overflow-x: auto;
-    margin: 10px 0;
-    border: 1px solid #1e293b;
-}
-
-.bot pre code {
-    font-family: monospace;
-    font-size: 13px;
     color: #e2e8f0;
 }
 
-/* INLINE CODE */
-.inline-code {
-    background: #0f172a;
-    padding: 2px 6px;
-    border-radius: 6px;
-    font-family: monospace;
-    font-size: 13px;
-    color: #38bdf8;
+/* function */
+.git-func {
+    font-size: 14px;
+    color: #a5b4fc;
+    padding-left: 6px;
 }
-.git-tree {
-    margin-top: 15px;
-    font-size: 12px;
-    color: #cbd5e1;
 
+.git-func:hover {
+    background: #1e293b;
+}
+.user-area {
     display: flex;
     flex-direction: column;
-    flex: 1;                  /* zajmuje resztę miejsca sidebaru */
-    min-height: 0;            /* ważne dla scrolla w flexbox */
-}
-.git-tree-scroll {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
+    align-items: flex-end;
+    gap: 6px;
 }
 
-#gitTree {
-    display: block;
+/* przycisk pod userem */
+.user-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* ten sam styl co wcześniej */
+.context-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+
+    background: #1e293b;
+    color: #e5e7eb;
+
+    border: 1px solid #334155;
+    border-radius: 6px;
+
+    cursor: pointer;
+}
+
+.context-btn:hover {
+    background: #334155;
+}
+.subheader {
+    height: 40px;
+    background: #020617;
+    border-bottom: 1px solid #1e293b;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+
+    color: #e5e7eb;
+    font-size: 14px;
+}
+
+.context-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #e5e7eb;
+    cursor: pointer;
+}
+
+.context-btn:hover {
+    background: #334155;
+}
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.folder-header {
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.folder-header:hover {
+    background: #2a2a2a;
+}
+
+.git-file {
+    cursor: pointer;
+}
+
+.git-func {
+    cursor: pointer;
+    color: #9ad;
 }
