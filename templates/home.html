@@ -17,6 +17,7 @@
 </div>
 
 <script>
+
 /* =======================
    MODELE
 ======================= */
@@ -25,25 +26,36 @@ let chatHistory = [];
 
 async function loadModels() {
 
-    const select = document.getElementById("modelSelect");
+    const select =
+        document.getElementById(
+            "modelSelect"
+        );
 
     try {
 
-        const res = await fetch("/models");
-        const models = await res.json();
+        const res =
+            await fetch("/models");
+
+        const models =
+            await res.json();
 
         select.innerHTML = "";
 
         models.forEach((m, index) => {
 
-            const opt = document.createElement("option");
+            const opt =
+                document.createElement(
+                    "option"
+                );
 
             opt.value = m;
             opt.textContent = m;
 
             if (
                 index === 0 ||
-                m.includes("llama-3.1-8b-instant")
+                m.includes(
+                    "llama-3.1-8b-instant"
+                )
             ) {
                 opt.selected = true;
             }
@@ -62,7 +74,10 @@ async function loadModels() {
 
 function getSelectedModel() {
 
-    const el = document.getElementById("modelSelect");
+    const el =
+        document.getElementById(
+            "modelSelect"
+        );
 
     return el
         ? el.value
@@ -106,64 +121,90 @@ function formatReply(text) {
         }
     );
 
-    // nowe linie
-    text = text.replace(/\n/g, "<br>");
+    text = text.replace(
+        /\n/g,
+        "<br>"
+    );
 
     return text;
 }
 
 async function sendMsg() {
 
-    const input = document.getElementById("msg");
-    const box = document.getElementById("chat-box");
-    const contextEl = document.getElementById("contextBox");
+    const input =
+        document.getElementById(
+            "msg"
+        );
 
-    const message = input.value.trim();
+    const box =
+        document.getElementById(
+            "chat-box"
+        );
+
+    const contextEl =
+        document.getElementById(
+            "contextBox"
+        );
+
+    const message =
+        input.value.trim();
+
     const context = contextEl
         ? contextEl.value.trim()
         : "";
 
-    const model = getSelectedModel();
+    const model =
+        getSelectedModel();
 
     if (!message) return;
 
     input.value = "";
 
     box.innerHTML += `
-<div class="user">Ty: ${message}</div>
+<div class="user">
+Ty: ${message}
+</div>
 `;
 
     try {
 
-        const res = await fetch("/chat", {
+        const res = await fetch(
+            "/chat",
+            {
+                method: "POST",
 
-            method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
 
-            headers: {
-                "Content-Type": "application/json"
-            },
+                body: JSON.stringify({
 
-            body: JSON.stringify({
+                    message: message,
+                    model: model,
+                    context: context,
 
-                message: message,
-                model: model,
-                context: context,
+                    history:
+                        chatHistory.slice(-10)
+                })
+            }
+        );
 
-                history: chatHistory.slice(-10)
-            })
-        });
+        const data =
+            await res.json();
 
-        const data = await res.json();
-
-        const formatted = formatReply(data.reply);
+        const formatted =
+            formatReply(data.reply);
 
         box.innerHTML += `
-<div class="bot">${formatted}</div>
+<div class="bot">
+${formatted}
+</div>
 `;
 
-        box.scrollTop = box.scrollHeight;
+        box.scrollTop =
+            box.scrollHeight;
 
-        // zapis historii
         chatHistory.push({
             role: "user",
             content: message
@@ -198,7 +239,9 @@ document.addEventListener(
         loadGitTree();
 
         const input =
-            document.getElementById("msg");
+            document.getElementById(
+                "msg"
+            );
 
         input.addEventListener(
             "keydown",
@@ -208,7 +251,9 @@ document.addEventListener(
                     e.key === "Enter" &&
                     !e.shiftKey
                 ) {
+
                     e.preventDefault();
+
                     sendMsg();
                 }
             }
@@ -227,34 +272,37 @@ function renderTree(
     basePath = ""
 ) {
 
-    const ul = document.createElement("ul");
+    const ul =
+        document.createElement(
+            "ul"
+        );
 
-    /* =======================
+    /* ===================
        FOLDERY
-    ======================= */
+    =================== */
 
     for (const key in node) {
 
         if (
             key === "_files" ||
-            key === "_functions" ||
-            key === "_classes"
+            key === "_file_functions" ||
+            key === "_file_classes"
         ) {
             continue;
         }
 
         const li =
-            document.createElement("li");
+            document.createElement(
+                "li"
+            );
 
-        li.textContent = "📁 " + key;
-
-        // ✅ WAŻNE:
-        // używamy DIV a NIE UL
-        // żeby nie tworzyć
-        // ul > ul > ul > ul
+        li.textContent =
+            "📁 " + key;
 
         const childContainer =
-            document.createElement("div");
+            document.createElement(
+                "div"
+            );
 
         childContainer.style.marginLeft =
             "15px";
@@ -265,21 +313,25 @@ function renderTree(
             basePath + key + "/"
         );
 
-        li.appendChild(childContainer);
+        li.appendChild(
+            childContainer
+        );
 
         ul.appendChild(li);
     }
 
-    /* =======================
+    /* ===================
        PLIKI
-    ======================= */
+    =================== */
 
     if (node._files) {
 
         node._files.forEach(file => {
 
             const li =
-                document.createElement("li");
+                document.createElement(
+                    "li"
+                );
 
             li.textContent =
                 "📄 " + file;
@@ -292,37 +344,55 @@ function renderTree(
                     basePath + file
                 );
 
-            ul.appendChild(li);
-        });
-    }
+            /* ===================
+               FUNKCJE PLIKU
+            =================== */
 
-    /* =======================
-       FUNKCJE
-    ======================= */
+            if (
+                node._file_functions &&
+                node._file_functions[file]
+            ) {
 
-    if (node._functions) {
+                const fnUl =
+                    document.createElement(
+                        "ul"
+                    );
 
-        node._functions.forEach(fn => {
+                fnUl.style.marginLeft =
+                    "15px";
 
-            const li =
-                document.createElement("li");
+                node._file_functions[file]
+                    .forEach(fn => {
 
-            li.textContent =
-                "ƒ " + fn.name;
+                    const fnLi =
+                        document.createElement(
+                            "li"
+                        );
 
-            li.className =
-                "git-func";
 
-            // jeśli nie masz loadFunction
-            // możesz to usunąć
+                    fnLi.textContent =
+                        "ƒ " + fn.name;
 
-            li.onclick = () => {
+                    fnLi.className =
+                        "git-func";
 
-                console.log(
-                    "FUNCTION:",
-                    fn.name
-                );
-            };
+                    fnLi.onclick = () =>
+                        loadFunction(
+                            fn.file,
+                            fn.name
+                    );
+
+                    fnUl.appendChild(
+                        fnLi
+                    );
+
+
+
+
+                });
+
+                li.appendChild(fnUl);
+            }
 
             ul.appendChild(li);
         });
@@ -331,20 +401,78 @@ function renderTree(
     container.appendChild(ul);
 }
 
+async function loadFunction(
+    path,
+    functionName
+) {
+
+    console.log(
+        "LOADING FUNCTION:",
+        path,
+        functionName
+    );
+
+    try {
+
+        const res = await fetch(
+            `/function?path=${encodeURIComponent(path)}&name=${encodeURIComponent(functionName)}`
+        );
+
+        const data =
+            await res.json();
+
+        if (data.error) {
+
+            console.error(
+                data.error
+            );
+
+            return;
+        }
+
+        const contextBox =
+            document.getElementById(
+                "contextBox"
+            );
+
+        contextBox.value =
+`FUNCTION: ${data.name}
+
+FILE: ${data.path}
+
+${data.content}`;
+
+    } catch (err) {
+
+        console.error(
+            "FUNCTION LOAD ERROR:",
+            err
+        );
+    }
+}
+
+
+/* =======================
+   LOAD TREE
+======================= */
 
 async function loadGitTree() {
 
     const container =
-        document.getElementById("gitTree");
+        document.getElementById(
+            "gitTree"
+        );
 
     try {
 
         const res =
-            await fetch("/git-tree");
+            await fetch(
+                "/git-tree"
+            );
 
         const tree =
             await res.json();
-        console.log(JSON.stringify(tree, null, 2));    
+
         container.innerHTML = "";
 
         renderTree(
@@ -363,7 +491,7 @@ async function loadGitTree() {
 
 
 /* =======================
-   ŁADOWANIE PLIKU
+   LOAD FILE
 ======================= */
 
 async function loadFile(path) {

@@ -28,35 +28,79 @@ def build_tree(root="."):
                 part
             )
 
+            # =========================
+            # PLIK
+            # =========================
+
             if i == len(parts) - 1:
 
-                node.setdefault("_files", []).append(part)
+                node.setdefault(
+                    "_files",
+                    []
+                ).append(part)
+
+                # =====================
+                # PYTHON
+                # =====================
 
                 if part.endswith(".py"):
 
-                    full_path = os.path.join(root, path)
+                    full_path = os.path.join(
+                        root,
+                        path
+                    )
 
-                    funcs, classes = extract_python_defs(full_path)
+                    funcs, classes = extract_python_defs(
+                        full_path
+                    )
+
+                    # =================
+                    # FUNKCJE
+                    # =================
 
                     if funcs:
-                        node.setdefault(
-                            "_functions",
-                            []
-                        ).extend([
-                            {**f, "file": path}
+
+                        file_functions = node.setdefault(
+                            "_file_functions",
+                            {}
+                        )
+
+                        file_functions[part] = [
+                            {
+                                **f,
+                                "file": path
+                            }
                             for f in funcs
-                        ])
+                        ]
+
+                    # =================
+                    # KLASY
+                    # =================
 
                     if classes:
-                        node.setdefault(
-                            "_classes",
-                            []
-                        ).extend([
-                            {**c, "file": path}
+
+                        file_classes = node.setdefault(
+                            "_file_classes",
+                            {}
+                        )
+
+                        file_classes[part] = [
+                            {
+                                **c,
+                                "file": path
+                            }
                             for c in classes
-                        ])
+                        ]
+
+            # =========================
+            # FOLDER
+            # =========================
 
             else:
-                node = node.setdefault(part, {})
+
+                node = node.setdefault(
+                    part,
+                    {}
+                )
 
     return tree

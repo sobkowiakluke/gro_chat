@@ -4,6 +4,11 @@ from flask import (
     request
 )
 
+from services.file_service import (
+    read_file,
+    read_function
+)
+
 from services.file_service import read_file
 
 file_bp = Blueprint(
@@ -30,3 +35,31 @@ def get_file():
         return jsonify({
             "error": str(e)
         }), 500
+
+
+@file_bp.route("/function")
+def get_function():
+
+    path = request.args.get("path")
+    name = request.args.get("name")
+
+    if not path or not name:
+        return jsonify({
+            "error": "missing params"
+        }), 400
+
+    content = read_function(
+        path,
+        name
+    )
+
+    if content is None:
+        return jsonify({
+            "error": "function not found"
+        }), 404
+
+    return jsonify({
+        "path": path,
+        "name": name,
+        "content": content
+    })
