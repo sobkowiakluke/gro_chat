@@ -20,22 +20,31 @@
 /* =======================
    MODELE
 ======================= */
+
 let chatHistory = [];
+
 async function loadModels() {
+
     const select = document.getElementById("modelSelect");
 
     try {
+
         const res = await fetch("/models");
         const models = await res.json();
 
         select.innerHTML = "";
 
         models.forEach((m, index) => {
+
             const opt = document.createElement("option");
+
             opt.value = m;
             opt.textContent = m;
 
-            if (index === 0 || m.includes("llama-3.1-8b-instant")) {
+            if (
+                index === 0 ||
+                m.includes("llama-3.1-8b-instant")
+            ) {
                 opt.selected = true;
             }
 
@@ -43,13 +52,21 @@ async function loadModels() {
         });
 
     } catch (err) {
-        console.error("Model load error:", err);
+
+        console.error(
+            "Model load error:",
+            err
+        );
     }
 }
 
 function getSelectedModel() {
+
     const el = document.getElementById("modelSelect");
-    return el ? el.value : "llama-3.1-8b-instant";
+
+    return el
+        ? el.value
+        : "llama-3.1-8b-instant";
 }
 
 
@@ -58,6 +75,7 @@ function getSelectedModel() {
 ======================= */
 
 function escapeHtml(text) {
+
     return text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -65,46 +83,73 @@ function escapeHtml(text) {
 }
 
 function formatReply(text) {
-    // blok kodu ```
-    text = text.replace(/```([\s\S]*?)```/g, function(match, code) {
-        return `<pre><code>${escapeHtml(code.trim())}</code></pre>`;
-    });
+
+    // ``` blok kodu
+    text = text.replace(
+        /```([\s\S]*?)```/g,
+        function(match, code) {
+
+            return `
+<pre><code>${escapeHtml(code.trim())}</code></pre>
+`;
+        }
+    );
 
     // inline `code`
-    text = text.replace(/`([^`]+)`/g, function(match, code) {
-        return `<code class="inline-code">${escapeHtml(code)}</code>`;
-    });
+    text = text.replace(
+        /`([^`]+)`/g,
+        function(match, code) {
 
-    // zwykłe nowe linie → <br>
+            return `
+<code class="inline-code">${escapeHtml(code)}</code>
+`;
+        }
+    );
+
+    // nowe linie
     text = text.replace(/\n/g, "<br>");
 
     return text;
 }
 
 async function sendMsg() {
+
     const input = document.getElementById("msg");
     const box = document.getElementById("chat-box");
     const contextEl = document.getElementById("contextBox");
 
     const message = input.value.trim();
-    const context = contextEl ? contextEl.value.trim() : "";
+    const context = contextEl
+        ? contextEl.value.trim()
+        : "";
+
     const model = getSelectedModel();
 
     if (!message) return;
 
     input.value = "";
 
-    box.innerHTML += `<div class="user">Ty: ${message}</div>`;
+    box.innerHTML += `
+<div class="user">Ty: ${message}</div>
+`;
 
     try {
+
         const res = await fetch("/chat", {
+
             method: "POST",
-            headers: {"Content-Type": "application/json"},
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
             body: JSON.stringify({
+
                 message: message,
                 model: model,
                 context: context,
-                history: chatHistory.slice(-10) // BEZ aktualnej wiadomości
+
+                history: chatHistory.slice(-10)
             })
         });
 
@@ -112,10 +157,13 @@ async function sendMsg() {
 
         const formatted = formatReply(data.reply);
 
-        box.innerHTML += `<div class="bot">${formatted}</div>`;
+        box.innerHTML += `
+<div class="bot">${formatted}</div>
+`;
+
         box.scrollTop = box.scrollHeight;
 
-        // ✅ dopiero TERAZ zapisujemy historię
+        // zapis historii
         chatHistory.push({
             role: "user",
             content: message
@@ -125,84 +173,156 @@ async function sendMsg() {
             role: "assistant",
             content: data.reply
         });
+
         contextEl.value = "";
 
     } catch (err) {
-        console.error("CHAT ERROR:", err);
+
+        console.error(
+            "CHAT ERROR:",
+            err
+        );
     }
 }
+
 
 /* =======================
    ENTER / SHIFT+ENTER
 ======================= */
-document.addEventListener("DOMContentLoaded", () => {
-    loadModels();
-    loadGitTree();
 
-    const input = document.getElementById("msg");
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
 
-    input.addEventListener("keydown", function(e) {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            sendMsg();
-        }
-    });
-});
+        loadModels();
+        loadGitTree();
+
+        const input =
+            document.getElementById("msg");
+
+        input.addEventListener(
+            "keydown",
+            function(e) {
+
+                if (
+                    e.key === "Enter" &&
+                    !e.shiftKey
+                ) {
+                    e.preventDefault();
+                    sendMsg();
+                }
+            }
+        );
+    }
+);
 
 
 /* =======================
    DRZEWO GIT
 ======================= */
-function renderTree(node, container, basePath = "") {
+
+function renderTree(
+    node,
+    container,
+    basePath = ""
+) {
 
     const ul = document.createElement("ul");
 
-    // 📁 foldery
+    /* =======================
+       FOLDERY
+    ======================= */
+
     for (const key in node) {
 
-        if (key === "_files" || key === "_functions" || key === "_classes") {
+        if (
+            key === "_files" ||
+            key === "_functions" ||
+            key === "_classes"
+        ) {
             continue;
         }
 
-        const li = document.createElement("li");
+        const li =
+            document.createElement("li");
+
         li.textContent = "📁 " + key;
 
-        const childUl = document.createElement("ul");
-        childUl.style.marginLeft = "15px";
+        // ✅ WAŻNE:
+        // używamy DIV a NIE UL
+        // żeby nie tworzyć
+        // ul > ul > ul > ul
+
+        const childContainer =
+            document.createElement("div");
+
+        childContainer.style.marginLeft =
+            "15px";
 
         renderTree(
             node[key],
-            childUl,
+            childContainer,
             basePath + key + "/"
         );
 
-        li.appendChild(childUl);
+        li.appendChild(childContainer);
+
         ul.appendChild(li);
     }
 
-    // 📄 pliki
+    /* =======================
+       PLIKI
+    ======================= */
+
     if (node._files) {
+
         node._files.forEach(file => {
 
-            const li = document.createElement("li");
-            li.textContent = "📄 " + file;
-            li.className = "git-file";
+            const li =
+                document.createElement("li");
 
-            li.onclick = () => loadFile(basePath + file);
+            li.textContent =
+                "📄 " + file;
+
+            li.className =
+                "git-file";
+
+            li.onclick = () =>
+                loadFile(
+                    basePath + file
+                );
 
             ul.appendChild(li);
         });
     }
 
-    // ƒ funkcje (opcjonalne)
+    /* =======================
+       FUNKCJE
+    ======================= */
+
     if (node._functions) {
+
         node._functions.forEach(fn => {
 
-            const li = document.createElement("li");
-            li.textContent = "ƒ " + fn.name;
-            li.className = "git-func";
+            const li =
+                document.createElement("li");
 
-            li.onclick = () => loadFunction(fn.file, fn);
+            li.textContent =
+                "ƒ " + fn.name;
+
+            li.className =
+                "git-func";
+
+            // jeśli nie masz loadFunction
+            // możesz to usunąć
+
+            li.onclick = () => {
+
+                console.log(
+                    "FUNCTION:",
+                    fn.name
+                );
+            };
 
             ul.appendChild(li);
         });
@@ -210,38 +330,71 @@ function renderTree(node, container, basePath = "") {
 
     container.appendChild(ul);
 }
+
+
 async function loadGitTree() {
-    const container = document.getElementById("gitTree");
+
+    const container =
+        document.getElementById("gitTree");
 
     try {
-        const res = await fetch("/git-tree");
-        const tree = await res.json();
 
+        const res =
+            await fetch("/git-tree");
+
+        const tree =
+            await res.json();
+        console.log(JSON.stringify(tree, null, 2));    
         container.innerHTML = "";
-        renderTree(tree, container);
+
+        renderTree(
+            tree,
+            container
+        );
 
     } catch (err) {
-        console.error("Git tree error:", err);
+
+        console.error(
+            "Git tree error:",
+            err
+        );
     }
 }
 
 
 /* =======================
-   ŁADOWANIE PLIKU → CONTEXT
+   ŁADOWANIE PLIKU
 ======================= */
+
 async function loadFile(path) {
-    console.log("LOADING FILE:", path);
+
+    console.log(
+        "LOADING FILE:",
+        path
+    );
 
     try {
-        const res = await fetch(`/file?path=${encodeURIComponent(path)}`);
-        const data = await res.json();
+
+        const res = await fetch(
+            `/file?path=${encodeURIComponent(path)}`
+        );
+
+        const data =
+            await res.json();
 
         if (data.error) {
-            console.error(data.error);
+
+            console.error(
+                data.error
+            );
+
             return;
         }
 
-        const contextBox = document.getElementById("contextBox");
+        const contextBox =
+            document.getElementById(
+                "contextBox"
+            );
 
         contextBox.value =
 `FILE: ${data.path}
@@ -249,9 +402,14 @@ async function loadFile(path) {
 ${data.content}`;
 
     } catch (err) {
-        console.error("FILE LOAD ERROR:", err);
+
+        console.error(
+            "FILE LOAD ERROR:",
+            err
+        );
     }
 }
+
 </script>
 
 {% endblock %}
