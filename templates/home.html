@@ -16,6 +16,30 @@
     <textarea id="contextBox" placeholder="Wpisz dodatkowy kontekst lub kliknij plik z lewej..."></textarea>
 </div>
 
+<style>
+
+.folder-header {
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.folder-header:hover {
+    background: #2a2a2a;
+}
+
+.git-file {
+    cursor: pointer;
+}
+
+.git-func {
+    cursor: pointer;
+    color: #9ad;
+}
+
+</style>
+
 <script>
 
 /* =======================
@@ -23,6 +47,8 @@
 ======================= */
 
 let chatHistory = [];
+let repoData = {};
+const collapsedFolders = new Set();
 
 async function loadModels() {
 
@@ -99,7 +125,6 @@ function escapeHtml(text) {
 
 function formatReply(text) {
 
-    // ``` blok kodu
     text = text.replace(
         /```([\s\S]*?)```/g,
         function(match, code) {
@@ -110,7 +135,6 @@ function formatReply(text) {
         }
     );
 
-    // inline `code`
     text = text.replace(
         /`([^`]+)`/g,
         function(match, code) {
@@ -263,6 +287,26 @@ document.addEventListener(
 
 
 /* =======================
+   TREE REFRESH
+======================= */
+
+function refreshTree() {
+
+    const container =
+        document.getElementById(
+            "gitTree"
+        );
+
+    container.innerHTML = "";
+
+    renderTree(
+        repoData,
+        container
+    );
+}
+
+
+/* =======================
    DRZEWO GIT
 ======================= */
 
@@ -291,13 +335,30 @@ function renderTree(
             continue;
         }
 
+        const folderPath =
+            basePath + key;
+
         const li =
             document.createElement(
                 "li"
             );
 
-        li.textContent =
-            "📁 " + key;
+        const folderHeader =
+            document.createElement(
+                "div"
+            );
+
+        folderHeader.className =
+            "folder-header";
+
+        const isCollapsed =
+            collapsedFolders.has(
+                folderPath
+            );
+
+        folderHeader.textContent =
+            (isCollapsed ? "▶ " : "▼ ")
+            + key;
 
         const childContainer =
             document.createElement(
@@ -307,10 +368,43 @@ function renderTree(
         childContainer.style.marginLeft =
             "15px";
 
+        childContainer.style.display =
+            isCollapsed
+                ? "none"
+                : "block";
+
+        folderHeader.onclick = (e) => {
+
+            e.stopPropagation();
+
+            if (
+                collapsedFolders.has(
+                    folderPath
+                )
+            ) {
+
+                collapsedFolders.delete(
+                    folderPath
+                );
+
+            } else {
+
+                collapsedFolders.add(
+                    folderPath
+                );
+            }
+
+            refreshTree();
+        };
+
         renderTree(
             node[key],
             childContainer,
             basePath + key + "/"
+        );
+
+        li.appendChild(
+            folderHeader
         );
 
         li.appendChild(
@@ -369,26 +463,25 @@ function renderTree(
                             "li"
                         );
 
-
                     fnLi.textContent =
                         "ƒ " + fn.name;
 
                     fnLi.className =
                         "git-func";
 
-                    fnLi.onclick = () =>
+                    fnLi.onclick = (e) => {
+
+                        e.stopPropagation();
+
                         loadFunction(
                             fn.file,
                             fn.name
-                    );
+                        );
+                    };
 
                     fnUl.appendChild(
                         fnLi
                     );
-
-
-
-
                 });
 
                 li.appendChild(fnUl);
@@ -470,13 +563,13 @@ async function loadGitTree() {
                 "/git-tree"
             );
 
-        const tree =
+        repoData =
             await res.json();
 
         container.innerHTML = "";
 
         renderTree(
-            tree,
+            repoData,
             container
         );
 

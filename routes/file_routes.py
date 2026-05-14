@@ -48,18 +48,12 @@ def get_function():
             "error": "missing params"
         }), 400
 
-    content = read_function(
+    result = read_function(
         path,
         name
     )
 
-    if content is None:
-        return jsonify({
-            "error": "function not found"
-        }), 404
+    if "error" in result:
+        return jsonify(result), 404
 
-    return jsonify({
-        "path": path,
-        "name": name,
-        "content": content
-    })
+    return jsonify(result)

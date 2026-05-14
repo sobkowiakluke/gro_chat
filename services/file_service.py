@@ -30,16 +30,38 @@ def read_function(path, function_name):
 
     for node in ast.walk(tree):
 
-        if isinstance(node, ast.FunctionDef):
+        if not isinstance(node, ast.FunctionDef):
+            continue
 
-            if node.name == function_name:
+        if node.name != function_name:
+            continue
 
-                start = node.lineno - 1
+        # jeśli funkcja ma dekoratory,
+        # zaczynamy od pierwszego @
 
-                end = node.end_lineno
+        if node.decorator_list:
 
-                return "\n".join(
-                    lines[start:end]
-                )
+            start = min(
+                d.lineno
+                for d in node.decorator_list
+            ) - 1
 
-    return None
+        else:
+
+            start = node.lineno - 1
+
+        end = node.end_lineno
+
+        content = "\n".join(
+            lines[start:end]
+        )
+
+        return {
+            "name": node.name,
+            "content": content,
+            "path": path
+        }
+
+    return {
+        "error": "Function not found"
+    }
