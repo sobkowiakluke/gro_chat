@@ -1,7 +1,12 @@
+let editedMessages = null;
+let chatHistory = [];
+
+
 function getSelectedModel() {
     const el = document.getElementById("modelSelect");
     return el ? el.value : "llama-3.1-8b-instant";
 }
+
 
 function escapeHtml(text) {
     return text
@@ -10,7 +15,9 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;");
 }
 
+
 function formatReply(text) {
+
     text = text.replace(/```([\s\S]*?)```/g, (_, code) =>
         `<pre><code>${escapeHtml(code.trim())}</code></pre>`
     );
@@ -23,6 +30,9 @@ function formatReply(text) {
 }
 
 
+// ==========================
+// BUILD BASE PAYLOAD
+// ==========================
 function getChatPayload() {
 
     const input = document.getElementById("msg");
@@ -44,39 +54,103 @@ async function sendMsg() {
 
     const box = document.getElementById("chat-box");
 
-    const payload = getChatPayload();
+    const basePayload = getChatPayload();
 
-    if (!payload.message) return;
+    if (!basePayload.message) return;
+
+    let finalMessages = editedMessages;
+
+    const contextEditor =
+        document.getElementById("contextContent");
+
+    if (contextEditor && contextEditor.value.trim()) {
+
+        try {
+
+            finalMessages = JSON.parse(
+                contextEditor.value
+            );
+
+        } catch (e) {
+
+            alert("Błąd JSON w popupie promptu");
+            return;
+        }
+    }
+
+    if (!finalMessages) {
+
+        const previewRes = await fetch(
+            "/prompt-context",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(basePayload)
+            }
+        );
+
+        const previewData =
+            await previewRes.json();
+
+        finalMessages =
+            previewData.messages;
+    }
 
     document.getElementById("msg").value = "";
 
-    box.innerHTML += `<div class="user">${payload.message}</div>`;
+    box.innerHTML += `
+        <div class="user">
+            ${basePayload.message}
+        </div>
+    `;
+
+    const payload = {
+        model: basePayload.model,
+        messages: finalMessages
+    };
 
     const res = await fetch("/chat", {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: {
+            "Content-Type": "application/json"
+        },
         body: JSON.stringify(payload)
     });
 
     const data = await res.json();
 
-    box.innerHTML += `<div class="bot">${formatReply(data.reply)}</div>`;
+    box.innerHTML += `
+        <div class="bot">
+            ${formatReply(data.reply)}
+        </div>
+    `;
 
     chatHistory.push(
-        { role: "user", content: payload.message },
-        { role: "assistant", content: data.reply }
+        {
+            role: "user",
+            content: basePayload.message
+        },
+        {
+            role: "assistant",
+            content: data.reply
+        }
     );
+
+    editedMessages = null;
 
     box.scrollTop = box.scrollHeight;
 }
 
 
 // ==========================
-// POPUP PREVIEW (PROMPT DEBUG + TOKEN ESTIMATE)
+// POPUP PREVIEW
 // ==========================
 async function toggleContext() {
 
-    const modal = document.getElementById("contextModal");
+    const modal =
+        document.getElementById("contextModal");
 
     if (!modal.classList.contains("hidden")) {
         modal.classList.add("hidden");
@@ -85,45 +159,29 @@ async function toggleContext() {
 
     const payload = getChatPayload();
 
-    const res = await fetch("/prompt-context", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(payload)
-    });
+    const res = await fetch(
+        "/prompt-context",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type":
+                    "application/json"
+            },
+            body: JSON.stringify(payload)
+        }
+    );
 
     const data = await res.json();
 
-    document.getElementById("contextContent").textContent = `
+    editedMessages = data.messages;
 
-===== TOKEN ESTIMATE =====
-~${data.tokens_estimate || 0} tokens (approx)
-
-
-===== SYSTEM PROMPT =====
-
-${data.system_prompt || ""}
-
-
-===== CONTEXT =====
-
-${data.context || ""}
-
-
-===== HISTORY =====
-
-${JSON.stringify(data.history || [], null, 2)}
-
-
-===== USER MESSAGE =====
-
-${data.user_message || ""}
-
-
-===== FINAL MESSAGES =====
-
-${JSON.stringify(data.messages || [], null, 2)}
-
-`;
+    document.getElementById(
+        "contextContent"
+    ).value = JSON.stringify(
+        data.messages,
+        null,
+        2
+    );
 
     modal.classList.remove("hidden");
 }
@@ -132,20 +190,30 @@ ${JSON.stringify(data.messages || [], null, 2)}
 // ==========================
 // INIT
 // ==========================
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
 
-    const input = document.getElementById("msg");
+        const input =
+            document.getElementById("msg");
 
-    loadModels();
+        loadModels();
 
-    if (!input) return;
+        if (!input) return;
 
-    input.addEventListener("keydown", (e) => {
+        input.addEventListener(
+            "keydown",
+            (e) => {
 
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            sendMsg();
-        }
-    });
+                if (
+                    e.key === "Enter" &&
+                    !e.shiftKey
+                ) {
+                    e.preventDefault();
+                    sendMsg();
+                }
+            }
+        );
 
-});
+    }
+);

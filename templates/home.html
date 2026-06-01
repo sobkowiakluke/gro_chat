@@ -4,7 +4,9 @@
 
 <div class="chat-header">
     <h1>Chat</h1>
-    <button class="context-btn" onclick="toggleContext()">kontekst</button>
+    <button class="context-btn" onclick="toggleContext()">
+        kontekst
+    </button>
 </div>
 
 <div id="chat-box" class="chat-box"></div>
@@ -16,24 +18,43 @@
 
 <div class="context-box">
     <label>Kontekst (dodawany do promptu)</label>
-    <textarea id="contextBox" placeholder="Wpisz dodatkowy kontekst lub kliknij plik z lewej..."></textarea>
+
+    <textarea
+        id="contextBox"
+        placeholder="Wpisz dodatkowy kontekst lub kliknij plik z lewej..."
+    ></textarea>
 </div>
 
+
+<!-- ========================= -->
 <!-- POPUP -->
+<!-- ========================= -->
 <div id="contextModal" class="context-modal hidden">
 
     <div class="context-window">
 
         <div class="context-topbar">
-            <span>Debug kontekstu promptu</span>
-            <button onclick="toggleContext()">✕</button>
+
+            <span>
+                Finalny prompt wysyłany do modelu
+            </span>
+
+            <button onclick="toggleContext()">
+                ✕
+            </button>
+
         </div>
 
-        <pre id="contextContent"></pre>
+        <!-- EDYTOWALNY PROMPT -->
+        <textarea
+            id="contextContent"
+            spellcheck="false"
+        ></textarea>
 
     </div>
 
 </div>
+
 
 <style>
 
@@ -41,40 +62,67 @@
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.7);
+
     display: flex;
     justify-content: center;
     align-items: center;
+
     z-index: 9999;
 }
 
 .context-window {
-    width: 80%;
-    height: 80%;
+    width: 90%;
+    height: 90%;
+
     background: #1e1e1e;
+
     border-radius: 10px;
+
     padding: 12px;
+
     display: flex;
     flex-direction: column;
 }
 
 .context-topbar {
     display: flex;
+
     justify-content: space-between;
     align-items: center;
+
     margin-bottom: 10px;
+
     color: white;
 }
 
 #contextContent {
+
     flex: 1;
+
+    width: 100%;
+    height: 100%;
+
+    resize: none;
+
     overflow: auto;
+
     background: #111;
     color: #ddd;
-    padding: 12px;
+
+    border: 1px solid #333;
     border-radius: 6px;
+
+    padding: 12px;
+
     white-space: pre-wrap;
+
     font-family: monospace;
     font-size: 13px;
+    line-height: 1.4;
+
+    outline: none;
+
+    box-sizing: border-box;
 }
 
 .hidden {

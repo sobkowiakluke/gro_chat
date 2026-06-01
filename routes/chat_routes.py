@@ -18,6 +18,9 @@ chat_bp = Blueprint(
 )
 
 
+# =========================
+# CHAT
+# =========================
 @chat_bp.route(
     "/chat",
     methods=["POST"]
@@ -28,16 +31,16 @@ def chat():
 
         data = request.json or {}
 
-        user_message = data.get("message", "")
-        model = data.get("model", "llama-3.1-8b-instant")
-        context = data.get("context", "")
-        history = data.get("history", [])
+        model = data.get(
+            "model",
+            "llama-3.1-8b-instant"
+        )
+
+        messages = data.get("messages") or []
 
         reply = send_chat(
-            user_message=user_message,
             model=model,
-            context=context,
-            history=history
+            messages=messages
         )
 
         return jsonify({
@@ -54,30 +57,52 @@ def chat():
         }), 500
 
 
+# =========================
+# MODELS
+# =========================
 @chat_bp.route("/models")
 def models():
 
     try:
-        return jsonify(get_models())
+
+        return jsonify(
+            get_models()
+        )
 
     except Exception as e:
+
         print(str(e))
+
         return jsonify([])
 
 
 # =========================
-# POPUP: PREVIEW PROMPTU
+# POPUP PREVIEW
 # =========================
-@chat_bp.route("/prompt-context", methods=["POST"])
+@chat_bp.route(
+    "/prompt-context",
+    methods=["POST"]
+)
 def prompt_context():
 
     try:
 
         data = request.json or {}
 
-        user_message = data.get("message", "")
-        context = data.get("context", "")
-        history = data.get("history", [])
+        user_message = data.get(
+            "message",
+            ""
+        )
+
+        context = data.get(
+            "context",
+            ""
+        )
+
+        history = data.get(
+            "history",
+            []
+        )
 
         return jsonify(
             preview_context(

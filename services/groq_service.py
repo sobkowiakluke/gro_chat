@@ -12,13 +12,16 @@ SYSTEM_PROMPT = (
 )
 
 
+# =========================
+# MODELS
+# =========================
 def get_models():
     model_list = client.models.list()
     return [m.id for m in model_list.data]
 
 
 # =========================
-# CORE BUILDER (WSPÓLNY)
+# PREVIEW BUILDER ONLY
 # =========================
 def build_messages(user_message, context, history):
 
@@ -29,14 +32,12 @@ def build_messages(user_message, context, history):
         }
     ]
 
-    # context (assistant kodu / pliki / kontekst)
     if context:
         messages.append({
             "role": "system",
             "content": f"KONTEKST:\n{context}"
         })
 
-    # historia rozmowy
     for msg in history:
         if msg.get("role") in ["user", "assistant"]:
             messages.append({
@@ -44,7 +45,6 @@ def build_messages(user_message, context, history):
                 "content": msg.get("content", "")
             })
 
-    # aktualna wiadomość
     messages.append({
         "role": "user",
         "content": user_message
@@ -54,18 +54,14 @@ def build_messages(user_message, context, history):
 
 
 # =========================
-# CHAT (FINAL CALL)
+# FINAL CHAT EXECUTOR
 # =========================
-def send_chat(user_message, model, context, history):
+def send_chat(model, messages):
 
-    messages = build_messages(user_message, context, history)
+    if not messages:
+        raise ValueError("messages is empty")
 
-    # DEBUG
-    debug("SYSTEM PROMPT", SYSTEM_PROMPT)
-    debug("USER MESSAGE", user_message)
-    debug("CONTEXT", context)
-    debug("HISTORY", history)
-    debug("FINAL MESSAGES", messages)
+    debug("FINAL MESSAGES SENT TO GROQ", messages)
 
     completion = client.chat.completions.create(
         model=model,
@@ -81,11 +77,15 @@ def send_chat(user_message, model, context, history):
 
 
 # =========================
-# PREVIEW (POPUP)
+# POPUP PREVIEW
 # =========================
 def preview_context(user_message, context, history):
 
-    messages = build_messages(user_message, context, history)
+    messages = build_messages(
+        user_message,
+        context,
+        history
+    )
 
     return {
         "system_prompt": SYSTEM_PROMPT,
@@ -96,12 +96,17 @@ def preview_context(user_message, context, history):
         "tokens_estimate": estimate_tokens(messages)
     }
 
+
+# =========================
+# SIMPLE TOKEN ESTIMATOR
+# =========================
 def estimate_tokens(messages):
 
     total_chars = 0
 
     for m in messages:
-        total_chars += len(m.get("content", ""))
+        total_chars += len(
+            m.get("content", "")
+        )
 
-    # heurystyka: ~4 znaki = 1 token (typowy LLM approximation)
     return math.ceil(total_chars / 4)
