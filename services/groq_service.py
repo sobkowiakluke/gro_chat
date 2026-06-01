@@ -1,7 +1,9 @@
 import math
+
 from utils.debug import debug
 from groq import Groq
 from config import GROQ_API_KEY
+
 
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -13,16 +15,51 @@ SYSTEM_PROMPT = (
 
 
 # =========================
+# MODEL FILTERING
+# =========================
+
+EXCLUDED_MODEL_KEYWORDS = [
+    "tts",
+    "whisper",
+    "speech",
+    "audio",
+    "transcribe",
+    "transcription",
+    "distil-whisper",
+    "playai",
+]
+
+
+def is_text_chat_model(model_id):
+    model_id_lower = model_id.lower()
+
+    for keyword in EXCLUDED_MODEL_KEYWORDS:
+        if keyword in model_id_lower:
+            return False
+
+    return True
+
+
+# =========================
 # MODELS
 # =========================
+
 def get_models():
     model_list = client.models.list()
-    return [m.id for m in model_list.data]
+
+    models = [
+        m.id
+        for m in model_list.data
+        if is_text_chat_model(m.id)
+    ]
+
+    return sorted(models)
 
 
 # =========================
 # PREVIEW BUILDER ONLY
 # =========================
+
 def build_messages(user_message, context, history):
 
     messages = [
@@ -56,6 +93,7 @@ def build_messages(user_message, context, history):
 # =========================
 # FINAL CHAT EXECUTOR
 # =========================
+
 def send_chat(model, messages):
 
     if not messages:
@@ -79,6 +117,7 @@ def send_chat(model, messages):
 # =========================
 # POPUP PREVIEW
 # =========================
+
 def preview_context(user_message, context, history):
 
     messages = build_messages(
@@ -100,6 +139,7 @@ def preview_context(user_message, context, history):
 # =========================
 # SIMPLE TOKEN ESTIMATOR
 # =========================
+
 def estimate_tokens(messages):
 
     total_chars = 0
