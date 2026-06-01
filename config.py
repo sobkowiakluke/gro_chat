@@ -8,9 +8,14 @@ SECRET_KEY = os.environ.get(
 CONFIG_FILE = "config.txt"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
 DEBUG = True
 
-# DB CONFIG (dodaj tutaj)
+
+# =========================
+# DATABASE
+# =========================
+
 DB_HOST = os.environ.get("DB_HOST", "localhost")
 DB_USER = os.environ.get("DB_USER", "flaskuser")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "Dwiemiarki32!")

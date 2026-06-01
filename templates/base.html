@@ -8,21 +8,57 @@
 <body>
 
 <header class="header">
+
     <div class="logo">Moja aplikacja</div>
+
+    <div class="top-chat-switcher">
+
+        <label for="conversationSelect">
+            Chat
+        </label>
+
+        <select id="conversationSelect">
+            <option value="">
+                Brak chatu
+            </option>
+        </select>
+
+        <button
+            type="button"
+            class="chat-top-btn"
+            onclick="createConversationFromHeader()"
+        >
+            + Nowy
+        </button>
+
+        <button
+            type="button"
+            class="chat-top-btn danger"
+            onclick="deleteActiveConversation()"
+        >
+            Usuń
+        </button>
+
+    </div>
 
     <div class="user-box">
         <div class="user-circle"></div>
         <div class="user-name">Zalogowany</div>
         <a class="logout-btn" href="/logout">Wyloguj</a>
     </div>
+
 </header>
 
-<!-- NOWY PAS POD HEADEREM -->
-
 <div class="container">
+
     <aside class="sidebar">
 
-        <label style="font-size:12px; color:#94a3b8;">Model Groq</label>
+        <label
+            style="font-size:12px; color:#94a3b8;"
+        >
+            Model Groq
+        </label>
+
         <select id="modelSelect"></select>
 
         <ul>
@@ -33,10 +69,13 @@
         </ul>
 
         <div class="git-tree">
+
             <label>Repo</label>
+
             <div class="git-tree-scroll">
                 <div id="gitTree"></div>
             </div>
+
         </div>
 
     </aside>
@@ -44,7 +83,10 @@
     <main class="content">
         {% block content %}{% endblock %}
     </main>
+
 </div>
+
+<script src="/static/js/conversations.js"></script>
 
 </body>
 </html>

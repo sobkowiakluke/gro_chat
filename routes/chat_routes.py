@@ -4,6 +4,7 @@ from flask import (
     jsonify
 )
 
+import json
 import traceback
 
 from services.groq_service import (
@@ -12,10 +13,22 @@ from services.groq_service import (
     preview_context
 )
 
+from db.messages import insert_message
+from db.conversations import touch_conversation
+
+
 chat_bp = Blueprint(
     "chat",
     __name__
 )
+
+
+def get_last_user_message(messages):
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            return msg.get("content", "")
+
+    return ""
 
 
 # =========================
@@ -31,6 +44,13 @@ def chat():
 
         data = request.json or {}
 
+        conversation_id = data.get("conversation_id")
+
+        if not conversation_id:
+            return jsonify({
+                "reply": "Brak aktywnego chatu."
+            }), 400
+
         model = data.get(
             "model",
             "llama-3.1-8b-instant"
@@ -38,9 +58,39 @@ def chat():
 
         messages = data.get("messages") or []
 
+        if not messages:
+            return jsonify({
+                "reply": "Brak wiadomości do wysłania."
+            }), 400
+
+        user_message = get_last_user_message(
+            messages
+        )
+
+        if user_message:
+            insert_message(
+                conversation_id=conversation_id,
+                role="user",
+                content=user_message
+            )
+
         reply = send_chat(
             model=model,
             messages=messages
+        )
+
+        insert_message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=reply,
+            raw_prompt=json.dumps(
+                messages,
+                ensure_ascii=False
+            )
+        )
+
+        touch_conversation(
+            conversation_id
         )
 
         return jsonify({

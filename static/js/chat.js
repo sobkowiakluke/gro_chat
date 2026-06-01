@@ -2,6 +2,31 @@ let editedMessages = null;
 let chatHistory = [];
 
 
+function getActiveConversationId() {
+    if (window.activeConversationId) {
+        return window.activeConversationId;
+    }
+
+    const select =
+        document.getElementById("conversationSelect");
+
+    if (!select || !select.value) {
+        return null;
+    }
+
+    const id =
+        parseInt(select.value, 10);
+
+    if (Number.isNaN(id)) {
+        return null;
+    }
+
+    window.activeConversationId = id;
+
+    return id;
+}
+
+
 function getSelectedModel() {
     const el = document.getElementById("modelSelect");
     return el ? el.value : "llama-3.1-8b-instant";
@@ -39,6 +64,7 @@ function getChatPayload() {
     const contextEl = document.getElementById("contextBox");
 
     return {
+        conversation_id: getActiveConversationId(),
         message: input.value.trim(),
         context: contextEl.value,
         history: chatHistory.slice(-10),
@@ -51,6 +77,14 @@ function getChatPayload() {
 // SEND MESSAGE
 // ==========================
 async function sendMsg() {
+
+    const conversationId =
+        getActiveConversationId();
+
+    if (!conversationId) {
+        alert("Najpierw utwórz albo wybierz chat.");
+        return;
+    }
 
     const box = document.getElementById("chat-box");
 
@@ -102,11 +136,12 @@ async function sendMsg() {
 
     box.innerHTML += `
         <div class="user">
-            ${basePayload.message}
+            ${escapeHtml(basePayload.message)}
         </div>
     `;
 
     const payload = {
+        conversation_id: conversationId,
         model: basePayload.model,
         messages: finalMessages
     };
@@ -148,6 +183,14 @@ async function sendMsg() {
 // POPUP PREVIEW
 // ==========================
 async function toggleContext() {
+
+    const conversationId =
+        getActiveConversationId();
+
+    if (!conversationId) {
+        alert("Najpierw utwórz albo wybierz chat.");
+        return;
+    }
 
     const modal =
         document.getElementById("contextModal");
