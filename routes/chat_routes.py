@@ -40,8 +40,7 @@ RECENT_HISTORY_LIMIT = 10
 def build_prompt_for_conversation(
     conversation_id,
     user_message,
-    context,
-    before_message_id=None
+    context
 ):
     summary_data = get_conversation_summary(
         conversation_id
@@ -49,8 +48,7 @@ def build_prompt_for_conversation(
 
     history = get_recent_messages(
         conversation_id=conversation_id,
-        limit=RECENT_HISTORY_LIMIT,
-        before_id=before_message_id
+        limit=RECENT_HISTORY_LIMIT
     )
 
     messages = build_messages(
@@ -126,14 +124,14 @@ def chat():
 
         context = data.get("context", "")
 
-        # Tryb awaryjny: jeżeli użytkownik ręcznie edytował JSON w popupie,
-        # frontend nadal może przesłać gotowe messages.
         edited_messages = data.get("messages")
 
         if not user_message and edited_messages:
             for msg in reversed(edited_messages):
                 if msg.get("role") == "user":
-                    user_message = msg.get("content", "")
+                    user_message = (
+                        msg.get("content") or ""
+                    ).strip()
                     break
 
         if not user_message:
@@ -141,25 +139,27 @@ def chat():
                 "reply": "Brak wiadomości do wysłania."
             }), 400
 
-        user_message_id = insert_message(
-            conversation_id=conversation_id,
-            role="user",
-            content=user_message
-        )
-
         if edited_messages:
             final_messages = edited_messages
         else:
             final_messages, _, _ = build_prompt_for_conversation(
                 conversation_id=conversation_id,
                 user_message=user_message,
-                context=context,
-                before_message_id=user_message_id
+                context=context
             )
 
+        # WAŻNE:
+        # Do tego momentu nic nie jest zapisane w bazie.
+        # Jeżeli Groq zwróci błąd, user_message nie trafi do historii.
         reply = send_chat(
             model=model,
             messages=final_messages
+        )
+
+        insert_message(
+            conversation_id=conversation_id,
+            role="user",
+            content=user_message
         )
 
         insert_message(
@@ -172,10 +172,15 @@ def chat():
             )
         )
 
-        update_summary_if_needed(
-            conversation_id=conversation_id,
-            model=model
-        )
+        try:
+            update_summary_if_needed(
+                conversation_id=conversation_id,
+                model=model
+            )
+        except Exception as summary_error:
+            print("Błąd aktualizacji streszczenia:")
+            print(str(summary_error))
+            print(traceback.format_exc())
 
         touch_conversation(
             conversation_id
@@ -190,7 +195,8 @@ def chat():
         print(traceback.format_exc())
 
         return jsonify({
-            "reply": "Błąd API Groq."
+            "reply": "Błąd API Groq.",
+            "error": str(e)
         }), 500
 
 
