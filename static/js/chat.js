@@ -67,7 +67,6 @@ function getChatPayload() {
         conversation_id: getActiveConversationId(),
         message: input.value.trim(),
         context: contextEl.value,
-        history: chatHistory.slice(-10),
         model: getSelectedModel()
     };
 }
@@ -92,12 +91,24 @@ async function sendMsg() {
 
     if (!basePayload.message) return;
 
-    let finalMessages = editedMessages;
+    let finalMessages = null;
 
     const contextEditor =
         document.getElementById("contextContent");
 
-    if (contextEditor && contextEditor.value.trim()) {
+    const contextModal =
+        document.getElementById("contextModal");
+
+    const promptPopupIsOpen = (
+        contextModal &&
+        !contextModal.classList.contains("hidden")
+    );
+
+    if (
+        promptPopupIsOpen &&
+        contextEditor &&
+        contextEditor.value.trim()
+    ) {
 
         try {
 
@@ -112,26 +123,6 @@ async function sendMsg() {
         }
     }
 
-    if (!finalMessages) {
-
-        const previewRes = await fetch(
-            "/prompt-context",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(basePayload)
-            }
-        );
-
-        const previewData =
-            await previewRes.json();
-
-        finalMessages =
-            previewData.messages;
-    }
-
     document.getElementById("msg").value = "";
 
     box.innerHTML += `
@@ -143,8 +134,13 @@ async function sendMsg() {
     const payload = {
         conversation_id: conversationId,
         model: basePayload.model,
-        messages: finalMessages
+        message: basePayload.message,
+        context: basePayload.context
     };
+
+    if (finalMessages) {
+        payload.messages = finalMessages;
+    }
 
     const res = await fetch("/chat", {
         method: "POST",
@@ -182,6 +178,26 @@ async function sendMsg() {
 // ==========================
 // POPUP PREVIEW
 // ==========================
+
+function closeContextModal() {
+
+    const modal =
+        document.getElementById("contextModal");
+
+    const contextEditor =
+        document.getElementById("contextContent");
+
+    if (modal) {
+        modal.classList.add("hidden");
+    }
+
+    if (contextEditor) {
+        contextEditor.value = "";
+    }
+
+    editedMessages = null;
+}
+
 async function toggleContext() {
 
     const conversationId =
@@ -196,7 +212,7 @@ async function toggleContext() {
         document.getElementById("contextModal");
 
     if (!modal.classList.contains("hidden")) {
-        modal.classList.add("hidden");
+        closeContextModal();
         return;
     }
 
@@ -257,6 +273,5 @@ document.addEventListener(
                 }
             }
         );
-
     }
 );

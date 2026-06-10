@@ -26,9 +26,12 @@ def insert_message(
     ))
 
     conn.commit()
+    message_id = cur.lastrowid
 
     cur.close()
     conn.close()
+
+    return message_id
 
 
 def get_messages(conversation_id):
@@ -45,6 +48,102 @@ def get_messages(conversation_id):
         WHERE conversation_id = %s
         ORDER BY created_at ASC, id ASC
     """, (conversation_id,))
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return rows
+
+
+def get_recent_messages(
+    conversation_id,
+    limit=10,
+    before_id=None
+):
+    conn = get_conn()
+    cur = conn.cursor(dictionary=True)
+
+    params = [conversation_id]
+
+    where_extra = ""
+
+    if before_id:
+        where_extra = "AND id < %s"
+        params.append(before_id)
+
+    params.append(limit)
+
+    cur.execute(f"""
+        SELECT
+            id,
+            role,
+            content,
+            created_at
+        FROM messages
+        WHERE conversation_id = %s
+        {where_extra}
+        ORDER BY id DESC
+        LIMIT %s
+    """, tuple(params))
+
+    rows = cur.fetchall()
+    rows.reverse()
+
+    cur.close()
+    conn.close()
+
+    return rows
+
+
+def get_old_messages_for_summary(
+    conversation_id,
+    summarized_until_message_id,
+    keep_last=10
+):
+    conn = get_conn()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("""
+        SELECT id
+        FROM messages
+        WHERE conversation_id = %s
+        ORDER BY id DESC
+        LIMIT %s
+    """, (
+        conversation_id,
+        keep_last
+    ))
+
+    recent_rows = cur.fetchall()
+
+    if len(recent_rows) < keep_last:
+        cur.close()
+        conn.close()
+        return []
+
+    oldest_recent_id = min(
+        row["id"] for row in recent_rows
+    )
+
+    cur.execute("""
+        SELECT
+            id,
+            role,
+            content,
+            created_at
+        FROM messages
+        WHERE conversation_id = %s
+          AND id > %s
+          AND id < %s
+          AND role IN ('user', 'assistant')
+        ORDER BY id ASC
+    """, (
+        conversation_id,
+        summarized_until_message_id or 0,
+        oldest_recent_id
+    ))
 
     rows = cur.fetchall()
 
