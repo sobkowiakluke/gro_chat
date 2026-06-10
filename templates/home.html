@@ -4,9 +4,16 @@
 
 <div class="chat-header">
     <h1>Chat</h1>
-    <button class="context-btn" onclick="toggleContext()">
-        kontekst
-    </button>
+
+    <div class="context-button-wrap">
+        <span id="promptTokenEstimate" class="prompt-token-estimate">
+            tokeny: —
+        </span>
+        <button class="context-btn" onclick="toggleContext()">
+            kontekst
+        </button>
+
+    </div>
 </div>
 
 <div id="chat-box" class="chat-box"></div>
@@ -35,9 +42,12 @@
 
         <div class="context-topbar">
 
-            <span>
-                Finalny prompt wysyłany do modelu
-            </span>
+            <div>
+                <div>
+                    Finalny prompt wysyłany do modelu
+                </div>
+                <div id="promptMeta" class="prompt-meta"></div>
+            </div>
 
             <button onclick="closeContextModal()">
                 ✕
@@ -45,11 +55,80 @@
 
         </div>
 
-        <!-- EDYTOWALNY PROMPT -->
-        <textarea
-            id="contextContent"
-            spellcheck="false"
-        ></textarea>
+        <div class="prompt-editor-grid">
+
+            <section class="prompt-section prompt-section-system">
+                <label>SYSTEM</label>
+                <textarea
+                    id="promptSystem"
+                    spellcheck="false"
+                ></textarea>
+            </section>
+
+            <section class="prompt-section prompt-section-summary">
+                <label>SUMMARY</label>
+                <textarea
+                    id="promptSummary"
+                    spellcheck="false"
+                ></textarea>
+            </section>
+
+            <section class="prompt-section prompt-section-context">
+                <label>CONTEXT</label>
+                <textarea
+                    id="promptContext"
+                    spellcheck="false"
+                ></textarea>
+            </section>
+
+            <section class="prompt-section prompt-section-history">
+                <div class="prompt-section-header">
+                    <label>HISTORY</label>
+                    <button
+                        type="button"
+                        onclick="addHistoryEditor('user', '')"
+                    >
+                        + user
+                    </button>
+                    <button
+                        type="button"
+                        onclick="addHistoryEditor('assistant', '')"
+                    >
+                        + assistant
+                    </button>
+                </div>
+
+                <div
+                    id="promptHistory"
+                    class="prompt-history-list"
+                ></div>
+            </section>
+
+            <section class="prompt-section prompt-section-user">
+                <label>USER MESSAGE</label>
+                <textarea
+                    id="promptUser"
+                    spellcheck="false"
+                ></textarea>
+            </section>
+
+        </div>
+
+        <div class="prompt-actions">
+            <button
+                type="button"
+                onclick="closeContextModal()"
+            >
+                Anuluj
+            </button>
+
+            <button
+                type="button"
+                onclick="sendMsg()"
+            >
+                Wyślij prompt
+            </button>
+        </div>
 
     </div>
 
@@ -71,8 +150,8 @@
 }
 
 .context-window {
-    width: 90%;
-    height: 90%;
+    width: 94%;
+    height: 92%;
 
     background: #1e1e1e;
 
@@ -82,6 +161,8 @@
 
     display: flex;
     flex-direction: column;
+
+    box-sizing: border-box;
 }
 
 .context-topbar {
@@ -95,15 +176,72 @@
     color: white;
 }
 
-#contextContent {
+.context-topbar button,
+.prompt-actions button,
+.prompt-section-header button,
+.prompt-history-top button {
+    background: #333;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 5px;
+    padding: 5px 9px;
+    cursor: pointer;
+}
 
+.context-topbar button:hover,
+.prompt-actions button:hover,
+.prompt-section-header button:hover,
+.prompt-history-top button:hover {
+    background: #444;
+}
+
+.prompt-meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #aaa;
+}
+
+.prompt-editor-grid {
     flex: 1;
+    min-height: 0;
+
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 0.65fr 1fr 0.65fr;
+    gap: 10px;
+}
+
+.prompt-section {
+    min-height: 0;
+
+    display: flex;
+    flex-direction: column;
+
+    background: #181818;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 8px;
+
+    box-sizing: border-box;
+}
+
+.prompt-section label,
+.prompt-section-header label {
+    margin-bottom: 6px;
+    color: #bbb;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+}
+
+.prompt-section textarea,
+.prompt-history-content {
+    flex: 1;
+    min-height: 0;
 
     width: 100%;
-    height: 100%;
 
     resize: none;
-
     overflow: auto;
 
     background: #111;
@@ -112,7 +250,7 @@
     border: 1px solid #333;
     border-radius: 6px;
 
-    padding: 12px;
+    padding: 10px;
 
     white-space: pre-wrap;
 
@@ -123,6 +261,92 @@
     outline: none;
 
     box-sizing: border-box;
+}
+
+.prompt-section-system {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.prompt-section-summary {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.prompt-section-context {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.prompt-section-history {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+}
+
+.prompt-section-user {
+    grid-column: 1;
+    grid-row: 3;
+}
+
+.prompt-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    margin-bottom: 6px;
+}
+
+.prompt-section-header label {
+    margin-right: auto;
+    margin-bottom: 0;
+}
+
+.prompt-history-list {
+    flex: 1;
+    min-height: 0;
+
+    overflow: auto;
+
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.prompt-history-item {
+    min-height: 180px;
+
+    display: flex;
+    flex-direction: column;
+
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 6px;
+
+    background: #151515;
+}
+
+.prompt-history-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    margin-bottom: 6px;
+}
+
+.prompt-history-role {
+    background: #111;
+    color: #ddd;
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 4px 8px;
+}
+
+.prompt-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+
+    margin-top: 10px;
 }
 
 .hidden {

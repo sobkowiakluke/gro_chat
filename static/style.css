@@ -466,3 +466,104 @@ p {
 .chat-top-btn.danger:hover {
     background: #7f1d1d;
 }
+/* =========================
+   MARKDOWN OUTPUT
+========================= */
+
+.bot h1,
+.bot h2,
+.bot h3,
+.bot h4 {
+    margin: 14px 0 8px;
+    color: #f8fafc;
+    line-height: 1.25;
+}
+
+.bot h1 {
+    font-size: 24px;
+}
+
+.bot h2 {
+    font-size: 20px;
+}
+
+.bot h3 {
+    font-size: 17px;
+}
+
+.bot p {
+    margin: 8px 0;
+    color: #e2e8f0;
+}
+
+.bot ul,
+.bot ol {
+    margin: 8px 0 8px 24px;
+    padding-left: 12px;
+}
+
+.bot li {
+    margin: 4px 0;
+}
+
+.bot blockquote {
+    margin: 10px 0;
+    padding: 8px 12px;
+    border-left: 3px solid #475569;
+    background: #0f172a;
+    color: #cbd5e1;
+    border-radius: 6px;
+}
+
+.bot .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    margin: 12px 0;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background: #020617;
+}
+
+.bot table {
+    width: 100%;
+    min-width: 520px;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.bot thead {
+    background: #0f172a;
+}
+
+.bot th,
+.bot td {
+    padding: 9px 11px;
+    border: 1px solid #334155;
+    vertical-align: top;
+    text-align: left;
+}
+
+.bot th {
+    color: #f8fafc;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.bot td {
+    color: #e2e8f0;
+}
+
+.bot tr:nth-child(even) td {
+    background: #0f172a;
+}
+
+.bot a {
+    color: #93c5fd;
+    text-decoration: underline;
+}
+
+.bot hr {
+    border: 0;
+    border-top: 1px solid #334155;
+    margin: 14px 0;
+}

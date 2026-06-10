@@ -25,6 +25,30 @@ function syncChatHistoryFromMessages(messages) {
 }
 
 
+function renderAssistantMessage(content) {
+
+    if (typeof renderMarkdown === "function") {
+        return renderMarkdown(content);
+    }
+
+    if (typeof escapeHtml === "function") {
+        return escapeHtml(content).replace(/\n/g, "<br>");
+    }
+
+    return String(content || "");
+}
+
+
+function renderUserMessage(content) {
+
+    if (typeof escapeHtml === "function") {
+        return escapeHtml(content);
+    }
+
+    return String(content || "");
+}
+
+
 function renderConversationMessages(messages) {
 
     const box =
@@ -42,7 +66,7 @@ function renderConversationMessages(messages) {
 
             box.innerHTML += `
                 <div class="user">
-                    ${escapeHtml(msg.content)}
+                    ${renderUserMessage(msg.content)}
                 </div>
             `;
 
@@ -50,7 +74,7 @@ function renderConversationMessages(messages) {
 
             box.innerHTML += `
                 <div class="bot">
-                    ${formatReply(msg.content)}
+                    ${renderAssistantMessage(msg.content)}
                 </div>
             `;
         }
@@ -128,7 +152,7 @@ async function loadConversations() {
         return;
     }
 
-    window.conversations.forEach(conv => {
+    window.conversations.forEach((conv) => {
 
         const option =
             document.createElement("option");

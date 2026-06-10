@@ -1,4 +1,8 @@
-from flask import Blueprint, jsonify, request
+from flask import (
+    Blueprint,
+    jsonify,
+    request
+)
 
 from db.conversations import (
     create_conversation,
@@ -6,7 +10,9 @@ from db.conversations import (
     delete_conversation
 )
 
-from db.messages import get_messages
+from db.messages import (
+    get_messages
+)
 
 
 conversation_bp = Blueprint(
@@ -15,9 +21,6 @@ conversation_bp = Blueprint(
 )
 
 
-# =========================
-# LIST CONVERSATIONS
-# =========================
 @conversation_bp.route(
     "/conversations",
     methods=["GET"]
@@ -31,9 +34,6 @@ def list_conversations():
     })
 
 
-# =========================
-# CREATE CONVERSATION
-# =========================
 @conversation_bp.route(
     "/conversations",
     methods=["POST"]
@@ -54,9 +54,6 @@ def create_new_conversation():
     })
 
 
-# =========================
-# DELETE CONVERSATION
-# =========================
 @conversation_bp.route(
     "/conversations/<int:conversation_id>",
     methods=["DELETE"]
@@ -70,9 +67,6 @@ def remove_conversation(conversation_id):
     })
 
 
-# =========================
-# GET CONVERSATION MESSAGES
-# =========================
 @conversation_bp.route(
     "/conversations/<int:conversation_id>/messages",
     methods=["GET"]
