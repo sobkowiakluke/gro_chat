@@ -283,6 +283,65 @@ def chat():
 
 
 # =========================
+# COMPRESS HISTORY
+# =========================
+@chat_bp.route(
+    "/compress-history",
+    methods=["POST"]
+)
+def compress_history():
+    try:
+        data = request.json or {}
+
+        model = data.get(
+            "model",
+            "llama-3.1-8b-instant"
+        )
+
+        messages = data.get(
+            "messages",
+            []
+        )
+
+        previous_summary = data.get(
+            "summary",
+            ""
+        )
+
+        if not messages:
+            return jsonify({
+                "error": "Brak wiadomości do streszczenia."
+            }), 400
+
+        summary = summarize_conversation_chunk(
+            model=model,
+            previous_summary=previous_summary,
+            messages=messages,
+            target_tokens=SUMMARY_TARGET_TOKENS
+        )
+
+        summary_message = [{
+            "role": "system",
+            "content": summary
+        }]
+
+        return jsonify({
+            "summary": summary,
+            "tokens_estimate": estimate_tokens(summary_message),
+            "token_budget": get_usable_prompt_budget(model),
+            "summary_token_limit": SUMMARY_TARGET_TOKENS
+        })
+
+    except Exception as e:
+        print(str(e))
+        print(traceback.format_exc())
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+# =========================
 # MODELS
 # =========================
 @chat_bp.route("/models")
@@ -298,9 +357,6 @@ def models():
         return jsonify([])
 
 
-# =========================
-# POPUP PREVIEW
-# =========================
 # =========================
 # POPUP PREVIEW
 # =========================

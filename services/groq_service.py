@@ -81,7 +81,7 @@ def get_models():
 # Estymator jest celowo konserwatywny, bo API dolicza narzut struktury messages.
 MODEL_PROMPT_BUDGETS = {
     "allam2-7b": 2000,
-    "openai/gpt-oss-120b": 20000,
+    "openai/gpt-oss-120b": 8000,
     "openai/gpt-oss-20b": 12000,
     "llama-3.1-8b-instant": 9000,
     "llama-3.3-70b-versatile": 20000,

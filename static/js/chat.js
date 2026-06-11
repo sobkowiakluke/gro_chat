@@ -163,7 +163,25 @@ function clearPromptSectionEditors() {
         meta.innerText = "";
     }
 }
+function clearPromptAfterSendKeepSummary() {
+    setPromptTextareaValue("promptSystem", "");
+    setPromptTextareaValue("promptContext", "");
+    setPromptTextareaValue("promptUser", "");
 
+    const historyList = document.getElementById("promptHistory");
+
+    if (historyList) {
+        historyList.innerHTML = "";
+    }
+
+    const meta = document.getElementById("promptMeta");
+
+    if (meta) {
+        meta.innerText = "";
+    }
+
+    // promptSummary zostaje bez zmian
+}
 
 function addHistoryEditor(role, content) {
     const historyList = document.getElementById("promptHistory");
@@ -418,6 +436,77 @@ function updatePromptMeta(data) {
 
 
 // ==========================
+// COMPRESS HISTORY TO SUMMARY
+// ==========================
+async function compressHistoryToSummary() {
+    const historyMessages = getHistoryMessagesFromEditors();
+
+    if (!historyMessages.length) {
+        alert("Brak historii do streszczenia.");
+        return;
+    }
+
+    const model = getSelectedModel();
+    const previousSummary = getPromptTextareaValue("promptSummary");
+
+    let res;
+    let data;
+
+    try {
+        res = await fetch("/compress-history", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: historyMessages,
+                summary: previousSummary
+            })
+        });
+
+        data = await res.json();
+
+    } catch (e) {
+        showApiErrorPopup(
+            "Nie udało się połączyć z backendem Flask.\n" +
+            String(e)
+        );
+
+        return;
+    }
+
+    if (!res.ok) {
+        showApiErrorPopup(
+            data.error ||
+            "Nie udało się utworzyć summary."
+        );
+
+        return;
+    }
+
+    setPromptTextareaValue(
+        "promptSummary",
+        data.summary || ""
+    );
+
+    const historyList = document.getElementById("promptHistory");
+
+    if (historyList) {
+        historyList.innerHTML = "";
+    }
+
+    updatePromptMeta({
+        tokens_estimate: data.tokens_estimate,
+        token_budget: data.token_budget,
+        history_limit: 0,
+        summary_token_limit: data.summary_token_limit,
+        summary_was_trimmed: false
+    });
+}
+
+
+// ==========================
 // SEND MESSAGE
 // ==========================
 async function sendMsg() {
@@ -432,10 +521,6 @@ async function sendMsg() {
     const input = document.getElementById("msg");
 
     const basePayload = getChatPayload();
-
-    if (!basePayload.message) {
-        return;
-    }
 
     const contextModal = document.getElementById("contextModal");
 
@@ -460,6 +545,16 @@ async function sendMsg() {
             alert("Prompt jest pusty.");
             return;
         }
+
+        if (!messageToSaveAndDisplay) {
+            alert("Brak wiadomości USER MESSAGE w prompcie.");
+            return;
+        }
+
+    } else {
+        if (!basePayload.message) {
+            return;
+        }
     }
 
     const payload = {
@@ -477,13 +572,16 @@ async function sendMsg() {
     let data;
 
     try {
-        res = await fetch("/chat", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(payload)
-        });
+        res = await fetch(
+            "/chat",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            }
+        );
 
         data = await res.json();
 
@@ -539,34 +637,10 @@ async function sendMsg() {
 
     editedMessages = null;
 
+    clearPromptAfterSendKeepSummary();
     closeContextModal();
 }
-
-
-// ==========================
-// POPUP PREVIEW
-// ==========================
-function closeContextModal() {
-    const modal = document.getElementById("contextModal");
-
-    if (modal) {
-        modal.classList.add("hidden");
-    }
-
-    clearPromptSectionEditors();
-
-    editedMessages = null;
-}
-
-
 async function toggleContext() {
-    const conversationId = getActiveConversationId();
-
-    if (!conversationId) {
-        alert("Najpierw utwórz albo wybierz chat.");
-        return;
-    }
-
     const modal = document.getElementById("contextModal");
 
     if (!modal) {
@@ -576,6 +650,25 @@ async function toggleContext() {
 
     if (!modal.classList.contains("hidden")) {
         closeContextModal();
+        return;
+    }
+
+    // Najpierw otwieramy popup.
+    // Dzięki temu klik zawsze daje widoczny efekt.
+    modal.classList.remove("hidden");
+
+    // Jeżeli prompt już był zbudowany/edytowany,
+    // nie pobieramy go drugi raz z backendu.
+    const existingMessages = buildMessagesFromPromptSections();
+
+    if (existingMessages.length > 0) {
+        return;
+    }
+
+    const conversationId = getActiveConversationId();
+
+    if (!conversationId) {
+        alert("Najpierw utwórz albo wybierz chat.");
         return;
     }
 
@@ -628,9 +721,21 @@ async function toggleContext() {
     );
 
     updatePromptMeta(data);
-
-    modal.classList.remove("hidden");
 }
+
+// ==========================
+// POPUP PREVIEW
+// ==========================
+function closeContextModal() {
+    const modal = document.getElementById("contextModal");
+
+    if (modal) {
+        modal.classList.add("hidden");
+    }
+
+    // Nie czyścimy promptu przy zamknięciu.
+}
+
 // ==========================
 // TOKEN ESTIMATE
 // ==========================
