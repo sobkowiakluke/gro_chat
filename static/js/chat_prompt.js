@@ -328,32 +328,30 @@ function updatePromptMeta(data) {
 
 
 // ==========================
-// COMPRESS HISTORY TO SUMMARY
+// BUILD SUMMARY PROMPT
 // ==========================
 async function compressHistoryToSummary() {
-    const historyMessages = getHistoryMessagesFromEditors();
+    const conversationId = getActiveConversationId();
 
-    if (!historyMessages.length) {
-        alert("Brak historii do streszczenia.");
+    if (!conversationId) {
+        alert("Najpierw utwórz albo wybierz chat.");
         return;
     }
 
     const model = getSelectedModel();
-    const previousSummary = getPromptTextareaValue("promptSummary");
 
     let res;
     let data;
 
     try {
-        res = await fetch("/compress-history", {
+        res = await fetch("/summary-context", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: model,
-                messages: historyMessages,
-                summary: previousSummary
+                conversation_id: conversationId,
+                model: model
             })
         });
 
@@ -371,30 +369,28 @@ async function compressHistoryToSummary() {
     if (!res.ok) {
         showApiErrorPopup(
             data.error ||
-            "Nie udało się utworzyć summary."
+            "Nie udało się zbudować payloadu summary."
         );
 
         return;
     }
 
-    setPromptTextareaValue(
-        "promptSummary",
-        data.summary || ""
-    );
-
-    const historyList = document.getElementById("promptHistory");
-
-    if (historyList) {
-        historyList.innerHTML = "";
+    if (!Array.isArray(data.messages)) {
+        showApiErrorPopup("Backend nie zwrócił messages dla summary.");
+        return;
     }
 
-    updatePromptMeta({
-        tokens_estimate: data.tokens_estimate,
-        token_budget: data.token_budget,
-        history_limit: 0,
-        summary_token_limit: data.summary_token_limit,
-        summary_was_trimmed: false
-    });
+    editedMessages = data.messages;
+    promptMode = "summary";
+    summaryUntilMessageId = data.summary_until_message_id;
+
+    fillPromptSectionEditors(editedMessages);
+    updatePromptMeta(data);
+
+    alert(
+        "Payload summary jest widoczny w popupie. " +
+        "Sprawdź go i kliknij »Wyślij prompt«, jeżeli ma zostać wysłany do LLM."
+    );
 }
 
 

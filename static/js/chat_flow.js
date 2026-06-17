@@ -57,6 +57,11 @@ async function sendMsg() {
         payload.messages = finalMessages;
     }
 
+    if (finalMessages && promptMode === "summary") {
+        payload.summary_mode = true;
+        payload.summary_until_message_id = summaryUntilMessageId;
+    }
+
     let res;
     let data;
 
@@ -90,6 +95,17 @@ async function sendMsg() {
             "Nieznany błąd API."
         );
 
+        return;
+    }
+
+    if (promptMode === "summary") {
+        alert("Summary zostało zaktualizowane.");
+        editedMessages = null;
+        promptMode = "chat";
+        summaryUntilMessageId = null;
+        clearPromptSectionEditors();
+        closeContextModal();
+        schedulePromptTokenEstimateUpdate();
         return;
     }
 
@@ -196,6 +212,8 @@ async function toggleContext() {
     }
 
     editedMessages = data.messages;
+    promptMode = "chat";
+    summaryUntilMessageId = null;
 
     fillPromptSectionEditors(
         editedMessages
@@ -214,7 +232,13 @@ function closeContextModal() {
         modal.classList.add("hidden");
     }
 
-    // Nie czyścimy promptu przy zamknięciu.
+    if (promptMode === "summary") {
+        promptMode = "chat";
+        summaryUntilMessageId = null;
+        editedMessages = null;
+    }
+
+    // Nie czyścimy promptu przy zamknięciu zwykłego promptu.
 }
 
 // ==========================

@@ -8,6 +8,7 @@ from services.groq_service import (
 from db.messages import (
     get_recent_messages,
     get_messages_after_id,
+    get_old_messages_for_summary,
 )
 
 from db.conversations import get_conversation_summary
@@ -15,6 +16,8 @@ from db.conversations import get_conversation_summary
 
 MAX_HISTORY_WITHOUT_SUMMARY = 40
 MAX_HISTORY_AFTER_SUMMARY = 40
+SUMMARY_KEEP_LAST_MESSAGES = 10
+SUMMARY_TARGET_TOKENS = 2500
 
 HISTORY_LIMIT_CANDIDATES = [
     40,
@@ -37,6 +40,13 @@ SUMMARY_TOKEN_CANDIDATES = [
     250,
     0,
 ]
+
+SUMMARY_SYSTEM_PROMPT = (
+    "Jesteś mechanizmem pamięci rozmowy technicznej. "
+    "Streszczasz starszą część rozmowy tak, aby kolejny model mógł kontynuować pracę nad projektem. "
+    "Zachowaj konkrety: decyzje, strukturę plików, błędy, poprawki, ustalenia, TODO i preferencje użytkownika. "
+    "Nie dopisuj faktów, których nie ma w rozmowie. Pisz po polsku, zwięźle, technicznie."
+)
 
 
 def build_messages(
@@ -157,7 +167,20 @@ def build_prompt_within_budget(
                     "summary_was_trimmed": trimmed_summary != (summary or ""),
                     "summary_used": bool(trimmed_summary),
                     "history_messages_loaded": len(history),
-                    "history_messages_used": len(selected_history)
+                    "history_messages_used": len(selected_history),
+                    "context_tokens": estimate_tokens([
+                        {
+                            "role": "system",
+                            "content": f"KONTEKST:\n{context}"
+                        }
+                    ]) if context else 0,
+                    "summary_tokens": estimate_tokens([
+                        {
+                            "role": "system",
+                            "content": trimmed_summary
+                        }
+                    ]) if trimmed_summary else 0,
+                    "history_tokens": estimate_tokens(selected_history),
                 }
 
     fallback_messages = build_messages(
@@ -181,7 +204,15 @@ def build_prompt_within_budget(
             "summary_was_trimmed": bool(summary),
             "summary_used": False,
             "history_messages_loaded": len(history),
-            "history_messages_used": 0
+            "history_messages_used": 0,
+            "context_tokens": estimate_tokens([
+                {
+                    "role": "system",
+                    "content": f"KONTEKST:\n{context}"
+                }
+            ]) if context else 0,
+            "summary_tokens": 0,
+            "history_tokens": 0,
         }
 
     raise ValueError(
@@ -211,8 +242,97 @@ def build_prompt_for_conversation(
     prompt_data["summarized_until_message_id"] = memory[
         "summarized_until_message_id"
     ]
+    prompt_data["model"] = model
 
     return prompt_data
+
+
+def build_summary_text(messages):
+    lines = []
+
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+
+        if role == "user":
+            label = "Użytkownik"
+        elif role == "assistant":
+            label = "Asystent"
+        else:
+            continue
+
+        lines.append(f"{label}: {content}")
+
+    return "\n\n".join(lines)
+
+
+def build_summary_prompt_for_conversation(
+    conversation_id,
+    model
+):
+    memory = load_prompt_memory(conversation_id)
+
+    messages_to_summarize = get_old_messages_for_summary(
+        conversation_id=conversation_id,
+        summarized_until_message_id=memory["summarized_until_message_id"],
+        keep_last=SUMMARY_KEEP_LAST_MESSAGES
+    )
+
+    if not messages_to_summarize:
+        return {
+            "messages": [],
+            "history": [],
+            "summary": memory["summary"],
+            "summary_until_message_id": memory["summarized_until_message_id"],
+            "tokens_estimate": 0,
+            "token_budget": get_usable_prompt_budget(model),
+            "prompt_source": "summary_not_needed",
+            "summary_used": bool(memory["summary"]),
+            "history_messages_loaded": 0,
+            "history_messages_used": 0,
+            "model": model,
+        }
+
+    summary_until_message_id = max(
+        msg["id"] for msg in messages_to_summarize
+    )
+
+    conversation_text = build_summary_text(messages_to_summarize)
+
+    user_content = (
+        "Dotychczasowe streszczenie rozmowy:\n"
+        f"{memory['summary'] or '(brak)'}\n\n"
+        "Nowy starszy fragment rozmowy do włączenia do streszczenia:\n"
+        f"{conversation_text}\n\n"
+        "Zwróć jedno aktualne, uporządkowane streszczenie całej starszej części rozmowy. "
+        f"Cel: maksymalnie około {SUMMARY_TARGET_TOKENS} tokenów."
+    )
+
+    messages = [
+        {
+            "role": "system",
+            "content": SUMMARY_SYSTEM_PROMPT
+        },
+        {
+            "role": "user",
+            "content": user_content
+        }
+    ]
+
+    return {
+        "messages": messages,
+        "history": messages_to_summarize,
+        "summary": memory["summary"],
+        "summary_until_message_id": summary_until_message_id,
+        "tokens_estimate": estimate_tokens(messages),
+        "token_budget": get_usable_prompt_budget(model),
+        "prompt_source": "summary_prompt_builder",
+        "summary_used": bool(memory["summary"]),
+        "history_messages_loaded": len(messages_to_summarize),
+        "history_messages_used": len(messages_to_summarize),
+        "summary_token_limit": SUMMARY_TARGET_TOKENS,
+        "model": model,
+    }
 
 
 def extract_summary_from_messages(messages):

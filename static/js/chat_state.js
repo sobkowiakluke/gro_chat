@@ -1,4 +1,6 @@
 let editedMessages = null;
+let promptMode = "chat";
+let summaryUntilMessageId = null;
 let chatHistory = [];
 
 

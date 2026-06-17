@@ -10,16 +10,13 @@ import traceback
 from services.groq_service import (
     send_chat,
     get_models,
-    preview_context,
-    summarize_conversation_chunk,
     estimate_tokens,
     get_usable_prompt_budget
 )
 
-from services.chat_prompt_service import SUMMARY_TARGET_TOKENS
-
 from services.prompt_builder import (
     build_prompt_for_conversation,
+    build_summary_prompt_for_conversation,
     extract_summary_from_messages
 )
 
@@ -44,15 +41,33 @@ def build_prompt_meta(prompt_data):
     return {
         "prompt_tokens_estimate": prompt_data.get("tokens_estimate"),
         "prompt_token_budget": prompt_data.get("token_budget"),
+        "tokens_estimate": prompt_data.get("tokens_estimate"),
+        "token_budget": prompt_data.get("token_budget"),
         "history_limit_used": prompt_data.get("history_limit"),
         "history_messages_loaded": prompt_data.get("history_messages_loaded"),
         "history_messages_used": prompt_data.get("history_messages_used"),
+        "history_tokens": prompt_data.get("history_tokens"),
         "summary_token_limit_used": prompt_data.get("summary_token_limit"),
+        "summary_tokens": prompt_data.get("summary_tokens"),
         "summary_was_trimmed": prompt_data.get("summary_was_trimmed"),
         "summary_used": prompt_data.get("summary_used"),
+        "context_tokens": prompt_data.get("context_tokens"),
         "prompt_source": prompt_data.get("prompt_source"),
-        "summarized_until_message_id": prompt_data.get("summarized_until_message_id")
+        "summarized_until_message_id": prompt_data.get("summarized_until_message_id"),
+        "summary_until_message_id": prompt_data.get("summary_until_message_id"),
+        "model": prompt_data.get("model")
     }
+
+
+def get_last_user_message(messages):
+    if not isinstance(messages, list):
+        return ""
+
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            return (msg.get("content") or "").strip()
+
+    return ""
 
 
 def persist_visible_summary_if_present(
@@ -75,7 +90,7 @@ def persist_visible_summary_if_present(
 
 
 # =========================
-# CHAT
+# CHAT / SUMMARY EXECUTOR
 # =========================
 @chat_bp.route(
     "/chat",
@@ -102,16 +117,11 @@ def chat():
         ).strip()
 
         context = data.get("context", "")
-
         edited_messages = data.get("messages")
+        summary_mode = bool(data.get("summary_mode"))
 
         if not user_message and edited_messages:
-            for msg in reversed(edited_messages):
-                if msg.get("role") == "user":
-                    user_message = (
-                        msg.get("content") or ""
-                    ).strip()
-                    break
+            user_message = get_last_user_message(edited_messages)
 
         if not user_message:
             return jsonify({
@@ -121,8 +131,6 @@ def chat():
         last_message_id_before_send = get_last_message_id(
             conversation_id
         )
-
-        summary_persisted = False
 
         if edited_messages:
             final_messages = edited_messages
@@ -138,8 +146,16 @@ def chat():
                 "summary_used": bool(
                     extract_summary_from_messages(final_messages)
                 ),
-                "prompt_source": "edited_prompt_from_popup",
-                "summarized_until_message_id": last_message_id_before_send
+                "prompt_source": (
+                    "edited_summary_prompt_from_popup"
+                    if summary_mode
+                    else "edited_prompt_from_popup"
+                ),
+                "summarized_until_message_id": last_message_id_before_send,
+                "summary_until_message_id": data.get(
+                    "summary_until_message_id"
+                ),
+                "model": model
             }
         else:
             prompt_data = build_prompt_for_conversation(
@@ -156,6 +172,35 @@ def chat():
             model=model,
             messages=final_messages
         )
+
+        if summary_mode:
+            summary_until_message_id = data.get(
+                "summary_until_message_id"
+            )
+
+            if summary_until_message_id is None:
+                return jsonify({
+                    "error": "Brak summary_until_message_id dla trybu summary."
+                }), 400
+
+            update_conversation_summary(
+                conv_id=conversation_id,
+                summary=reply,
+                summarized_until_message_id=summary_until_message_id
+            )
+
+            touch_conversation(conversation_id)
+
+            response = {
+                "reply": reply,
+                "summary_updated": True,
+                "summary_until_message_id": summary_until_message_id
+            }
+            response.update(build_prompt_meta(prompt_data))
+
+            return jsonify(response)
+
+        summary_persisted = False
 
         if edited_messages:
             summary_persisted = persist_visible_summary_if_present(
@@ -203,54 +248,45 @@ def chat():
 
 
 # =========================
-# COMPRESS HISTORY
+# SUMMARY PROMPT PREVIEW
 # =========================
 @chat_bp.route(
-    "/compress-history",
+    "/summary-context",
     methods=["POST"]
 )
-def compress_history():
+def summary_context():
     try:
         data = request.json or {}
+
+        conversation_id = data.get("conversation_id")
+
+        if not conversation_id:
+            return jsonify({
+                "error": "Brak aktywnego chatu."
+            }), 400
 
         model = data.get(
             "model",
             "llama-3.1-8b-instant"
         )
 
-        messages = data.get(
-            "messages",
-            []
+        prompt_data = build_summary_prompt_for_conversation(
+            conversation_id=conversation_id,
+            model=model
         )
 
-        previous_summary = data.get(
-            "summary",
-            ""
-        )
-
-        if not messages:
+        if not prompt_data.get("messages"):
             return jsonify({
-                "error": "Brak wiadomości do streszczenia."
+                "error": "Brak starszej historii do streszczenia."
             }), 400
 
-        summary = summarize_conversation_chunk(
-            model=model,
-            previous_summary=previous_summary,
-            messages=messages,
-            target_tokens=SUMMARY_TARGET_TOKENS
-        )
+        response = {
+            "messages": prompt_data["messages"],
+            "summary_mode": True
+        }
+        response.update(build_prompt_meta(prompt_data))
 
-        summary_message = [{
-            "role": "system",
-            "content": summary
-        }]
-
-        return jsonify({
-            "summary": summary,
-            "tokens_estimate": estimate_tokens(summary_message),
-            "token_budget": get_usable_prompt_budget(model),
-            "summary_token_limit": SUMMARY_TARGET_TOKENS
-        })
+        return jsonify(response)
 
     except Exception as e:
         print(str(e))
@@ -259,6 +295,22 @@ def compress_history():
         return jsonify({
             "error": str(e)
         }), 500
+
+
+# =========================
+# OLD ENDPOINT BLOCKED
+# =========================
+@chat_bp.route(
+    "/compress-history",
+    methods=["POST"]
+)
+def compress_history():
+    return jsonify({
+        "error": (
+            "Endpoint /compress-history nie wykonuje już ukrytego wywołania LLM. "
+            "Użyj /summary-context, sprawdź payload w popupie i wyślij go jawnie."
+        )
+    }), 410
 
 
 # =========================
@@ -317,39 +369,17 @@ def prompt_context():
             model=model
         )
 
-        messages = prompt_data["messages"]
+        response = {
+            "system_prompt": None,
+            "summary": prompt_data.get("summary", ""),
+            "context": context,
+            "history": prompt_data.get("history", []),
+            "user_message": user_message,
+            "messages": prompt_data["messages"],
+        }
+        response.update(build_prompt_meta(prompt_data))
 
-        preview = preview_context(
-            user_message=user_message,
-            context=context,
-            history=prompt_data.get("history", []),
-            summary=prompt_data.get("summary", ""),
-            model=model
-        )
-
-        preview["messages"] = messages
-        preview["tokens_estimate"] = prompt_data.get("tokens_estimate")
-        preview["token_budget"] = prompt_data.get("token_budget")
-        preview["history_limit"] = prompt_data.get("history_limit")
-        preview["history_messages_loaded"] = prompt_data.get(
-            "history_messages_loaded"
-        )
-        preview["history_messages_used"] = prompt_data.get(
-            "history_messages_used"
-        )
-        preview["summary_token_limit"] = prompt_data.get(
-            "summary_token_limit"
-        )
-        preview["summary_was_trimmed"] = prompt_data.get(
-            "summary_was_trimmed"
-        )
-        preview["summary_used"] = prompt_data.get("summary_used")
-        preview["prompt_source"] = prompt_data.get("prompt_source")
-        preview["summarized_until_message_id"] = prompt_data.get(
-            "summarized_until_message_id"
-        )
-
-        return jsonify(preview)
+        return jsonify(response)
 
     except Exception as e:
         print(str(e))
