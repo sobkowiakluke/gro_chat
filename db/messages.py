@@ -151,3 +151,56 @@ def get_old_messages_for_summary(
     conn.close()
 
     return rows
+
+def get_messages_after_id(
+    conversation_id,
+    after_id=0,
+    limit=40
+):
+    conn = get_conn()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("""
+        SELECT
+            id,
+            role,
+            content,
+            created_at
+        FROM messages
+        WHERE conversation_id = %s
+          AND id > %s
+          AND role IN ('user', 'assistant')
+        ORDER BY id DESC
+        LIMIT %s
+    """, (
+        conversation_id,
+        after_id or 0,
+        limit
+    ))
+
+    rows = cur.fetchall()
+    rows.reverse()
+
+    cur.close()
+    conn.close()
+
+    return rows
+
+
+def get_last_message_id(conversation_id):
+    conn = get_conn()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("""
+        SELECT MAX(id) AS last_id
+        FROM messages
+        WHERE conversation_id = %s
+    """, (conversation_id,))
+
+    row = cur.fetchone() or {}
+
+    cur.close()
+    conn.close()
+
+    return row.get("last_id") or 0
+

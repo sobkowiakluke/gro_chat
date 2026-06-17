@@ -34,6 +34,29 @@ function clearPromptSectionEditors() {
         meta.innerText = "";
     }
 }
+
+
+function normalizeSummaryForPrompt(summary) {
+    const value = (summary || "").trim();
+
+    if (!value) {
+        return "";
+    }
+
+    if (value.startsWith("STRESZCZENIE STARSZEJ CZĘŚCI ROZMOWY:")) {
+        return value;
+    }
+
+    return "STRESZCZENIE STARSZEJ CZĘŚCI ROZMOWY:\n" + value;
+}
+
+
+function stripSummaryPrefix(summary) {
+    return (summary || "")
+        .replace(/^STRESZCZENIE STARSZEJ CZĘŚCI ROZMOWY:\n?/, "")
+        .trim();
+}
+
 function addHistoryEditor(role, content) {
     const historyList = document.getElementById("promptHistory");
 
@@ -125,7 +148,7 @@ function splitMessagesIntoSections(messages) {
             role === "system" &&
             content.startsWith("STRESZCZENIE")
         ) {
-            sections.summary.push(content);
+            sections.summary.push(stripSummaryPrefix(content));
             return;
         }
 
@@ -220,7 +243,7 @@ function buildMessagesFromPromptSections() {
     if (summary) {
         messages.push({
             role: "system",
-            content: summary
+            content: normalizeSummaryForPrompt(summary)
         });
     }
 
@@ -266,9 +289,27 @@ function updatePromptMeta(data) {
         );
     }
 
-    if (data.history_limit !== undefined && data.history_limit !== null) {
+    if (data.prompt_source) {
+        parts.push(`źródło: ${data.prompt_source}`);
+    }
+
+    if (data.summary_used !== undefined) {
+        parts.push(data.summary_used ? "summary: tak" : "summary: nie");
+    }
+
+    if (data.history_messages_used !== undefined && data.history_messages_used !== null) {
+        parts.push(
+            `historia użyta: ${data.history_messages_used}`
+        );
+    } else if (data.history_limit !== undefined && data.history_limit !== null) {
         parts.push(
             `historia: ${data.history_limit}`
+        );
+    }
+
+    if (data.history_messages_loaded !== undefined && data.history_messages_loaded !== null) {
+        parts.push(
+            `historia pobrana: ${data.history_messages_loaded}`
         );
     }
 

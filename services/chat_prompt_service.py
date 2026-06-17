@@ -1,13 +1,14 @@
 from services.groq_service import (
-    build_messages_within_budget,
     summarize_conversation_chunk,
     restructure_summary
 )
 
-from db.messages import (
-    get_recent_messages,
-    get_old_messages_for_summary
+from services.prompt_builder import (
+    build_prompt_for_conversation,
+    MAX_HISTORY_WITHOUT_SUMMARY
 )
+
+from db.messages import get_old_messages_for_summary
 
 from db.conversations import (
     get_conversation_summary,
@@ -15,40 +16,9 @@ from db.conversations import (
 )
 
 
-MAX_HISTORY_FOR_DYNAMIC_PROMPT = 40
 SUMMARY_RESTRUCTURE_THRESHOLD_RATIO = 0.80
 SUMMARY_TARGET_TOKENS = 2500
 SUMMARY_COMPACT_TARGET_TOKENS = 1500
-
-
-def get_history_for_dynamic_prompt(conversation_id):
-    return get_recent_messages(
-        conversation_id=conversation_id,
-        limit=MAX_HISTORY_FOR_DYNAMIC_PROMPT
-    )
-
-
-def build_prompt_for_conversation(
-    conversation_id,
-    user_message,
-    context,
-    model
-):
-    summary_data = get_conversation_summary(
-        conversation_id
-    )
-
-    history = get_history_for_dynamic_prompt(
-        conversation_id
-    )
-
-    return build_messages_within_budget(
-        model=model,
-        user_message=user_message,
-        context=context,
-        history=history,
-        summary=summary_data["summary"]
-    )
 
 
 def maybe_restructure_summary(
@@ -109,7 +79,7 @@ def update_summary_if_needed(
         summarized_until_message_id=summary_data[
             "summarized_until_message_id"
         ],
-        keep_last=MAX_HISTORY_FOR_DYNAMIC_PROMPT
+        keep_last=MAX_HISTORY_WITHOUT_SUMMARY
     )
 
     if not old_messages:

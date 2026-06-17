@@ -16,19 +16,62 @@ from services.groq_service import (
     get_usable_prompt_budget
 )
 
-from services.chat_prompt_service import (
+from services.chat_prompt_service import SUMMARY_TARGET_TOKENS
+
+from services.prompt_builder import (
     build_prompt_for_conversation,
-    SUMMARY_TARGET_TOKENS
+    extract_summary_from_messages
 )
 
-from db.messages import insert_message
-from db.conversations import touch_conversation
+from db.messages import (
+    insert_message,
+    get_last_message_id
+)
+
+from db.conversations import (
+    touch_conversation,
+    update_conversation_summary
+)
 
 
 chat_bp = Blueprint(
     "chat",
     __name__
 )
+
+
+def build_prompt_meta(prompt_data):
+    return {
+        "prompt_tokens_estimate": prompt_data.get("tokens_estimate"),
+        "prompt_token_budget": prompt_data.get("token_budget"),
+        "history_limit_used": prompt_data.get("history_limit"),
+        "history_messages_loaded": prompt_data.get("history_messages_loaded"),
+        "history_messages_used": prompt_data.get("history_messages_used"),
+        "summary_token_limit_used": prompt_data.get("summary_token_limit"),
+        "summary_was_trimmed": prompt_data.get("summary_was_trimmed"),
+        "summary_used": prompt_data.get("summary_used"),
+        "prompt_source": prompt_data.get("prompt_source"),
+        "summarized_until_message_id": prompt_data.get("summarized_until_message_id")
+    }
+
+
+def persist_visible_summary_if_present(
+    conversation_id,
+    messages,
+    summarized_until_message_id
+):
+    summary = extract_summary_from_messages(messages)
+
+    if not summary:
+        return False
+
+    update_conversation_summary(
+        conv_id=conversation_id,
+        summary=summary,
+        summarized_until_message_id=summarized_until_message_id
+    )
+
+    return True
 
 
 # =========================
@@ -75,6 +118,12 @@ def chat():
                 "reply": "Brak wiadomości do wysłania."
             }), 400
 
+        last_message_id_before_send = get_last_message_id(
+            conversation_id
+        )
+
+        summary_persisted = False
+
         if edited_messages:
             final_messages = edited_messages
             prompt_data = {
@@ -82,8 +131,15 @@ def chat():
                 "tokens_estimate": estimate_tokens(final_messages),
                 "token_budget": get_usable_prompt_budget(model),
                 "history_limit": None,
+                "history_messages_loaded": None,
+                "history_messages_used": None,
                 "summary_token_limit": None,
-                "summary_was_trimmed": False
+                "summary_was_trimmed": False,
+                "summary_used": bool(
+                    extract_summary_from_messages(final_messages)
+                ),
+                "prompt_source": "edited_prompt_from_popup",
+                "summarized_until_message_id": last_message_id_before_send
             }
         else:
             prompt_data = build_prompt_for_conversation(
@@ -94,12 +150,19 @@ def chat():
             )
             final_messages = prompt_data["messages"]
 
-        # Do tego momentu nic nie jest zapisane w bazie.
+        # Do tego momentu nic nie jest zapisane w historii wiadomości.
         # Jeżeli Groq zwróci błąd, user_message nie trafi do historii.
         reply = send_chat(
             model=model,
             messages=final_messages
         )
+
+        if edited_messages:
+            summary_persisted = persist_visible_summary_if_present(
+                conversation_id=conversation_id,
+                messages=final_messages,
+                summarized_until_message_id=last_message_id_before_send
+            )
 
         insert_message(
             conversation_id=conversation_id,
@@ -121,14 +184,13 @@ def chat():
             conversation_id
         )
 
-        return jsonify({
+        response = {
             "reply": reply,
-            "prompt_tokens_estimate": prompt_data.get("tokens_estimate"),
-            "prompt_token_budget": prompt_data.get("token_budget"),
-            "history_limit_used": prompt_data.get("history_limit"),
-            "summary_token_limit_used": prompt_data.get("summary_token_limit"),
-            "summary_was_trimmed": prompt_data.get("summary_was_trimmed")
-        })
+            "summary_persisted": summary_persisted
+        }
+        response.update(build_prompt_meta(prompt_data))
+
+        return jsonify(response)
 
     except Exception as e:
         print(str(e))
@@ -269,8 +331,23 @@ def prompt_context():
         preview["tokens_estimate"] = prompt_data.get("tokens_estimate")
         preview["token_budget"] = prompt_data.get("token_budget")
         preview["history_limit"] = prompt_data.get("history_limit")
-        preview["summary_token_limit"] = prompt_data.get("summary_token_limit")
-        preview["summary_was_trimmed"] = prompt_data.get("summary_was_trimmed")
+        preview["history_messages_loaded"] = prompt_data.get(
+            "history_messages_loaded"
+        )
+        preview["history_messages_used"] = prompt_data.get(
+            "history_messages_used"
+        )
+        preview["summary_token_limit"] = prompt_data.get(
+            "summary_token_limit"
+        )
+        preview["summary_was_trimmed"] = prompt_data.get(
+            "summary_was_trimmed"
+        )
+        preview["summary_used"] = prompt_data.get("summary_used")
+        preview["prompt_source"] = prompt_data.get("prompt_source")
+        preview["summarized_until_message_id"] = prompt_data.get(
+            "summarized_until_message_id"
+        )
 
         return jsonify(preview)
 
