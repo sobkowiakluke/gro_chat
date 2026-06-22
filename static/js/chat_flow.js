@@ -19,12 +19,14 @@ async function sendMsg() {
     );
 
     let finalMessages = null;
+    let finalPromptSections = null;
     let messageToSaveAndDisplay = basePayload.message;
 
     if (promptPopupIsOpen) {
+        finalPromptSections = buildPromptSectionsFromEditors();
         finalMessages = buildMessagesFromPromptSections();
 
-        const editedUserMessage = getUserMessageFromPromptSections();
+        const editedUserMessage = finalPromptSections.user_message;
 
         if (editedUserMessage) {
             messageToSaveAndDisplay = editedUserMessage;
@@ -53,7 +55,10 @@ async function sendMsg() {
         context: basePayload.context
     };
 
-    if (finalMessages) {
+    if (finalPromptSections) {
+        payload.prompt_sections = finalPromptSections;
+        payload.persist_prompt_memory = true;
+    } else if (finalMessages) {
         payload.messages = finalMessages;
     }
 
@@ -104,6 +109,7 @@ async function sendMsg() {
         promptMode = "chat";
         summaryUntilMessageId = null;
         clearPromptSectionEditors();
+        promptMemoryDirty = false;
         closeContextModal();
         schedulePromptTokenEstimateUpdate();
         return;
@@ -141,6 +147,7 @@ async function sendMsg() {
     );
 
     editedMessages = null;
+    promptMemoryDirty = false;
 
     clearPromptSectionEditors();
     closeContextModal();
@@ -215,9 +222,11 @@ async function toggleContext() {
     promptMode = "chat";
     summaryUntilMessageId = null;
 
-    fillPromptSectionEditors(
-        editedMessages
-    );
+    if (data.prompt_sections) {
+        fillPromptSectionEditorsFromSections(data.prompt_sections);
+    } else {
+        fillPromptSectionEditors(editedMessages);
+    }
 
     updatePromptMeta(data);
 }
@@ -225,8 +234,24 @@ async function toggleContext() {
 // ==========================
 // POPUP PREVIEW
 // ==========================
-function closeContextModal() {
+async function closeContextModal() {
     const modal = document.getElementById("contextModal");
+
+    if (promptMode !== "summary" && promptMemoryDirty) {
+        const shouldSave = confirm(
+            "Prompt został zmodyfikowany. Zapisać zmiany jako pamięć tej rozmowy?"
+        );
+
+        if (shouldSave) {
+            const saved = await savePromptMemoryFromPopup();
+
+            if (!saved) {
+                return;
+            }
+        } else {
+            promptMemoryDirty = false;
+        }
+    }
 
     if (modal) {
         modal.classList.add("hidden");

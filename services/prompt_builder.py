@@ -12,6 +12,7 @@ from db.messages import (
 )
 
 from db.conversations import get_conversation_summary
+from db.prompt_memory import get_prompt_memory
 
 
 MAX_HISTORY_WITHOUT_SUMMARY = 40
@@ -49,50 +50,185 @@ SUMMARY_SYSTEM_PROMPT = (
 )
 
 
-def build_messages(
-    user_message,
-    context,
-    history,
-    summary=""
-):
-    messages = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT
-        }
-    ]
+def merge_runtime_context(saved_context, runtime_context):
+    saved_context = (saved_context or "").strip()
+    runtime_context = (runtime_context or "").strip()
+
+    if saved_context and runtime_context:
+        return (
+            f"{saved_context}\n\n"
+            "---\n"
+            "BIEŻĄCY KONTEKST Z POLA CONTEXTBOX:\n"
+            f"{runtime_context}"
+        )
+
+    return saved_context or runtime_context
+
+
+def normalize_section_text(value):
+    return str(value or "").strip()
+
+
+def build_messages_from_prompt_sections(sections):
+    sections = sections or {}
+
+    messages = []
+
+    system = normalize_section_text(sections.get("system"))
+    summary = normalize_section_text(sections.get("summary"))
+    facts = normalize_section_text(sections.get("facts"))
+    decisions = normalize_section_text(sections.get("decisions"))
+    context = normalize_section_text(sections.get("context"))
+    history = sections.get("history") or []
+    user_message = normalize_section_text(sections.get("user_message"))
+
+    if system:
+        for part in system.split("\n---\n"):
+            part = part.strip()
+            if part:
+                messages.append({
+                    "role": "system",
+                    "content": part
+                })
 
     if summary:
-        messages.append({
-            "role": "system",
-            "content": (
+        if summary.startswith("STRESZCZENIE STARSZEJ CZĘŚCI ROZMOWY:"):
+            summary_content = summary
+        else:
+            summary_content = (
                 "STRESZCZENIE STARSZEJ CZĘŚCI ROZMOWY:\n"
                 f"{summary}"
             )
+
+        messages.append({
+            "role": "system",
+            "content": summary_content
+        })
+
+    if facts:
+        messages.append({
+            "role": "system",
+            "content": f"FAKTY USTALONE W ROZMOWIE:\n{facts}"
+        })
+
+    if decisions:
+        messages.append({
+            "role": "system",
+            "content": f"DECYZJE I ZAŁOŻENIA PROJEKTOWE:\n{decisions}"
         })
 
     if context:
         messages.append({
             "role": "system",
-            "content": f"KONTEKST:\n{context}"
+            "content": f"KONTEKST ROBOCZY / WORKSPACE:\n{context}"
         })
 
     for msg in history:
-        if msg.get("role") in ["user", "assistant"]:
+        role = msg.get("role")
+        content = normalize_section_text(msg.get("content"))
+
+        if role in ["user", "assistant", "system"] and content:
             messages.append({
-                "role": msg["role"],
-                "content": msg.get("content", "")
+                "role": role,
+                "content": content
             })
 
-    messages.append({
-        "role": "user",
-        "content": user_message
-    })
+    if user_message:
+        messages.append({
+            "role": "user",
+            "content": user_message
+        })
 
     return messages
 
 
-def load_prompt_memory(conversation_id):
+def build_prompt_sections(prompt_data, user_message="", context=""):
+    """
+    Sekcje widoczne w popupie.
+
+    Ważne: to NIE musi być dokładnie ta sama lista, która finalnie idzie do LLM.
+    Popup ma pokazywać stan źródłowy pamięci rozmowy: summary, fakty,
+    decyzje, kontekst i historię. Dopiero osobny etap buduje/przycina
+    finalne messages do budżetu modelu.
+    """
+    return {
+        "system": prompt_data.get("system") or SYSTEM_PROMPT,
+        "summary": prompt_data.get("summary") or "",
+        "facts": prompt_data.get("facts") or "",
+        "decisions": prompt_data.get("decisions") or "",
+        "context": prompt_data.get("context") or context or "",
+        "history": prompt_data.get("history") or [],
+        "user_message": user_message or prompt_data.get("user_message") or ""
+    }
+
+
+def build_visible_prompt_sections(memory, user_message=""):
+    """
+    Buduje sekcje przeznaczone do popupu z nieprzyciętej pamięci rozmowy.
+
+    build_prompt_within_budget() może skrócić summary albo ograniczyć historię
+    do zera. To jest poprawne dla wysyłki do LLM, ale błędne dla popupu,
+    który ma być edytorem/podglądem całego dostępnego kontekstu rozmowy.
+    """
+    return {
+        "system": memory.get("system") or SYSTEM_PROMPT,
+        "summary": memory.get("summary") or "",
+        "facts": memory.get("facts") or "",
+        "decisions": memory.get("decisions") or "",
+        "context": memory.get("context") or "",
+        "history": memory.get("history") or [],
+        "user_message": user_message or ""
+    }
+
+
+def build_summary_prompt_sections(
+    current_summary,
+    messages_to_summarize,
+    target_tokens
+):
+    conversation_text = build_summary_text(messages_to_summarize)
+
+    return {
+        "system": SUMMARY_SYSTEM_PROMPT,
+        "summary": current_summary or "",
+        "facts": "",
+        "decisions": "",
+        "context": "",
+        "history": messages_to_summarize or [],
+        "user_message": (
+            "Włącz widoczne elementy z pola SUMMARY oraz HISTORY do jednego "
+            "aktualnego, uporządkowanego streszczenia starszej części rozmowy. "
+            "Zachowaj decyzje, fakty, strukturę plików, błędy, poprawki, TODO "
+            "i preferencje użytkownika. "
+            f"Cel: maksymalnie około {target_tokens} tokenów.\n\n"
+            "Tekst rozmowy do streszczenia znajduje się w sekcji HISTORY.\n\n"
+            "Materiał pomocniczy z HISTORY w formie ciągłej:\n"
+            f"{conversation_text}"
+        )
+    }
+
+
+def build_messages(
+    user_message,
+    context,
+    history,
+    summary="",
+    system=None,
+    facts="",
+    decisions=""
+):
+    return build_messages_from_prompt_sections({
+        "system": system or SYSTEM_PROMPT,
+        "summary": summary,
+        "facts": facts,
+        "decisions": decisions,
+        "context": context,
+        "history": history,
+        "user_message": user_message
+    })
+
+
+def _load_dynamic_prompt_base(conversation_id, runtime_context=""):
     summary_data = get_conversation_summary(conversation_id)
 
     summary = summary_data["summary"]
@@ -117,19 +253,72 @@ def load_prompt_memory(conversation_id):
         source = "recent_history_without_summary"
 
     return {
-        "summary": summary,
+        "system": SYSTEM_PROMPT,
+        "summary": summary or "",
+        "facts": "",
+        "decisions": "",
+        "context": runtime_context or "",
         "summarized_until_message_id": summarized_until_message_id,
-        "history": history,
+        "history": history or [],
+        "user_message": "",
         "source": source
     }
 
+
+def load_prompt_memory(conversation_id, runtime_context=""):
+    """
+    Zwraca sekcje promptu do popupu.
+
+    Ważne: zapisany prompt_memory jest nakładką na stan rozmowy z DB,
+    a nie kompletnym zamiennikiem historii. Dzięki temu zapisanie samego
+    SYSTEM nie powoduje zniknięcia HISTORY z popupu.
+
+    Zasada:
+    - system/facts/decisions: jeśli zapisane, nadpisują bazę,
+    - summary: jeśli zapisane, nadpisuje summary rozmowy; jeśli puste,
+      bierzemy aktualne summary z conversations,
+    - context: zapisany context łączymy z bieżącym contextBox,
+    - history: jeśli zapisana historia nie jest pusta, używamy jej;
+      w przeciwnym razie bierzemy dynamiczną historię z messages,
+    - user_message: nie pochodzi z pamięci; ustawia ją bieżące pole input
+      w build_prompt_sections().
+    """
+    base = _load_dynamic_prompt_base(
+        conversation_id=conversation_id,
+        runtime_context=runtime_context
+    )
+
+    saved_memory = get_prompt_memory(conversation_id)
+
+    if not saved_memory:
+        return base
+
+    saved_history = saved_memory.get("history") or []
+
+    return {
+        "system": saved_memory.get("system") or base["system"],
+        "summary": saved_memory.get("summary") or base["summary"],
+        "facts": saved_memory.get("facts") or base["facts"],
+        "decisions": saved_memory.get("decisions") or base["decisions"],
+        "context": merge_runtime_context(
+            saved_memory.get("context"),
+            runtime_context
+        ) or base["context"],
+        "history": saved_history or base["history"],
+        "user_message": "",
+        "summarized_until_message_id": base["summarized_until_message_id"],
+        "source": "saved_prompt_memory_overlay"
+    }
 
 def build_prompt_within_budget(
     model,
     user_message,
     context,
     history,
-    summary=""
+    summary="",
+    system=None,
+    facts="",
+    decisions=""
 ):
     usable_budget = get_usable_prompt_budget(model)
 
@@ -150,7 +339,10 @@ def build_prompt_within_budget(
                 user_message=user_message,
                 context=context,
                 history=selected_history,
-                summary=trimmed_summary
+                summary=trimmed_summary,
+                system=system,
+                facts=facts,
+                decisions=decisions
             )
 
             token_estimate = estimate_tokens(messages)
@@ -158,8 +350,13 @@ def build_prompt_within_budget(
             if token_estimate <= usable_budget:
                 return {
                     "messages": messages,
+                    "system": system or SYSTEM_PROMPT,
                     "history": selected_history,
                     "summary": trimmed_summary,
+                    "facts": facts,
+                    "decisions": decisions,
+                    "context": context,
+                    "user_message": user_message,
                     "tokens_estimate": token_estimate,
                     "token_budget": usable_budget,
                     "history_limit": history_limit,
@@ -171,7 +368,7 @@ def build_prompt_within_budget(
                     "context_tokens": estimate_tokens([
                         {
                             "role": "system",
-                            "content": f"KONTEKST:\n{context}"
+                            "content": f"KONTEKST ROBOCZY / WORKSPACE:\n{context}"
                         }
                     ]) if context else 0,
                     "summary_tokens": estimate_tokens([
@@ -187,7 +384,10 @@ def build_prompt_within_budget(
         user_message=user_message,
         context=context,
         history=[],
-        summary=""
+        summary="",
+        system=system,
+        facts=facts,
+        decisions=decisions
     )
 
     token_estimate = estimate_tokens(fallback_messages)
@@ -195,8 +395,13 @@ def build_prompt_within_budget(
     if token_estimate <= usable_budget:
         return {
             "messages": fallback_messages,
+            "system": system or SYSTEM_PROMPT,
             "history": [],
             "summary": "",
+            "facts": facts,
+            "decisions": decisions,
+            "context": context,
+            "user_message": user_message,
             "tokens_estimate": token_estimate,
             "token_budget": usable_budget,
             "history_limit": 0,
@@ -208,7 +413,7 @@ def build_prompt_within_budget(
             "context_tokens": estimate_tokens([
                 {
                     "role": "system",
-                    "content": f"KONTEKST:\n{context}"
+                    "content": f"KONTEKST ROBOCZY / WORKSPACE:\n{context}"
                 }
             ]) if context else 0,
             "summary_tokens": 0,
@@ -228,14 +433,22 @@ def build_prompt_for_conversation(
     context,
     model
 ):
-    memory = load_prompt_memory(conversation_id)
+    memory = load_prompt_memory(
+        conversation_id=conversation_id,
+        runtime_context=context
+    )
+
+    effective_user_message = user_message or memory.get("user_message") or ""
 
     prompt_data = build_prompt_within_budget(
         model=model,
-        user_message=user_message,
-        context=context,
+        user_message=effective_user_message,
+        context=memory["context"],
         history=memory["history"],
-        summary=memory["summary"]
+        summary=memory["summary"],
+        system=memory["system"],
+        facts=memory["facts"],
+        decisions=memory["decisions"]
     )
 
     prompt_data["prompt_source"] = memory["source"]
@@ -243,6 +456,13 @@ def build_prompt_for_conversation(
         "summarized_until_message_id"
     ]
     prompt_data["model"] = model
+
+    # Sekcje do popupu muszą pochodzić z nieprzyciętej pamięci rozmowy.
+    # prompt_data["history"] może być już przycięte do budżetu modelu.
+    prompt_data["visible_prompt_sections"] = build_visible_prompt_sections(
+        memory=memory,
+        user_message=effective_user_message
+    )
 
     return prompt_data
 
@@ -297,30 +517,17 @@ def build_summary_prompt_for_conversation(
         msg["id"] for msg in messages_to_summarize
     )
 
-    conversation_text = build_summary_text(messages_to_summarize)
-
-    user_content = (
-        "Dotychczasowe streszczenie rozmowy:\n"
-        f"{memory['summary'] or '(brak)'}\n\n"
-        "Nowy starszy fragment rozmowy do włączenia do streszczenia:\n"
-        f"{conversation_text}\n\n"
-        "Zwróć jedno aktualne, uporządkowane streszczenie całej starszej części rozmowy. "
-        f"Cel: maksymalnie około {SUMMARY_TARGET_TOKENS} tokenów."
+    prompt_sections = build_summary_prompt_sections(
+        current_summary=memory["summary"],
+        messages_to_summarize=messages_to_summarize,
+        target_tokens=SUMMARY_TARGET_TOKENS
     )
 
-    messages = [
-        {
-            "role": "system",
-            "content": SUMMARY_SYSTEM_PROMPT
-        },
-        {
-            "role": "user",
-            "content": user_content
-        }
-    ]
+    messages = build_messages_from_prompt_sections(prompt_sections)
 
     return {
         "messages": messages,
+        "prompt_sections": prompt_sections,
         "history": messages_to_summarize,
         "summary": memory["summary"],
         "summary_until_message_id": summary_until_message_id,

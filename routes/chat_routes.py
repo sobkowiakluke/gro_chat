@@ -17,7 +17,14 @@ from services.groq_service import (
 from services.prompt_builder import (
     build_prompt_for_conversation,
     build_summary_prompt_for_conversation,
+    build_messages_from_prompt_sections,
+    build_prompt_sections,
     extract_summary_from_messages
+)
+
+from db.prompt_memory import (
+    save_prompt_memory,
+    delete_prompt_memory
 )
 
 from db.messages import (
@@ -52,6 +59,8 @@ def build_prompt_meta(prompt_data):
         "summary_was_trimmed": prompt_data.get("summary_was_trimmed"),
         "summary_used": prompt_data.get("summary_used"),
         "context_tokens": prompt_data.get("context_tokens"),
+        "facts_used": bool(prompt_data.get("facts")),
+        "decisions_used": bool(prompt_data.get("decisions")),
         "prompt_source": prompt_data.get("prompt_source"),
         "summarized_until_message_id": prompt_data.get("summarized_until_message_id"),
         "summary_until_message_id": prompt_data.get("summary_until_message_id"),
@@ -118,6 +127,7 @@ def chat():
 
         context = data.get("context", "")
         edited_messages = data.get("messages")
+        prompt_sections = data.get("prompt_sections")
         summary_mode = bool(data.get("summary_mode"))
 
         if not user_message and edited_messages:
@@ -132,7 +142,37 @@ def chat():
             conversation_id
         )
 
-        if edited_messages:
+        if prompt_sections:
+            if data.get("persist_prompt_memory"):
+                save_prompt_memory(
+                    conversation_id=conversation_id,
+                    sections=prompt_sections
+                )
+
+            final_messages = build_messages_from_prompt_sections(prompt_sections)
+            prompt_data = {
+                "messages": final_messages,
+                "prompt_sections": prompt_sections,
+                "tokens_estimate": estimate_tokens(final_messages),
+                "token_budget": get_usable_prompt_budget(model),
+                "history_limit": None,
+                "history_messages_loaded": None,
+                "history_messages_used": len(prompt_sections.get("history") or []),
+                "summary_token_limit": None,
+                "summary_was_trimmed": False,
+                "summary_used": bool(prompt_sections.get("summary")),
+                "prompt_source": (
+                    "edited_summary_sections_from_popup"
+                    if summary_mode
+                    else "edited_sections_from_popup"
+                ),
+                "summarized_until_message_id": last_message_id_before_send,
+                "summary_until_message_id": data.get(
+                    "summary_until_message_id"
+                ),
+                "model": model
+            }
+        elif edited_messages:
             final_messages = edited_messages
             prompt_data = {
                 "messages": final_messages,
@@ -202,7 +242,14 @@ def chat():
 
         summary_persisted = False
 
-        if edited_messages:
+        if prompt_sections and prompt_sections.get("summary"):
+            update_conversation_summary(
+                conv_id=conversation_id,
+                summary=prompt_sections.get("summary"),
+                summarized_until_message_id=last_message_id_before_send
+            )
+            summary_persisted = True
+        elif edited_messages:
             summary_persisted = persist_visible_summary_if_present(
                 conversation_id=conversation_id,
                 messages=final_messages,
@@ -282,11 +329,89 @@ def summary_context():
 
         response = {
             "messages": prompt_data["messages"],
+            "prompt_sections": prompt_data.get("prompt_sections"),
             "summary_mode": True
         }
         response.update(build_prompt_meta(prompt_data))
 
         return jsonify(response)
+
+    except Exception as e:
+        print(str(e))
+        print(traceback.format_exc())
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+# =========================
+# PROMPT MEMORY SAVE / RESET
+# =========================
+@chat_bp.route(
+    "/prompt-memory",
+    methods=["POST"]
+)
+def prompt_memory_save():
+    try:
+        data = request.json or {}
+
+        conversation_id = data.get("conversation_id")
+
+        if not conversation_id:
+            return jsonify({
+                "error": "Brak aktywnego chatu."
+            }), 400
+
+        prompt_sections = data.get("prompt_sections") or {}
+
+        saved = save_prompt_memory(
+            conversation_id=conversation_id,
+            sections=prompt_sections
+        )
+
+        final_messages = build_messages_from_prompt_sections(saved)
+
+        return jsonify({
+            "saved": True,
+            "prompt_sections": saved,
+            "messages": final_messages,
+            "tokens_estimate": estimate_tokens(final_messages),
+            "token_budget": get_usable_prompt_budget(
+                data.get("model", "llama-3.1-8b-instant")
+            ),
+            "prompt_source": "saved_prompt_memory"
+        })
+
+    except Exception as e:
+        print(str(e))
+        print(traceback.format_exc())
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+@chat_bp.route(
+    "/prompt-memory",
+    methods=["DELETE"]
+)
+def prompt_memory_delete():
+    try:
+        data = request.json or {}
+
+        conversation_id = data.get("conversation_id")
+
+        if not conversation_id:
+            return jsonify({
+                "error": "Brak aktywnego chatu."
+            }), 400
+
+        delete_prompt_memory(conversation_id)
+
+        return jsonify({
+            "deleted": True
+        })
 
     except Exception as e:
         print(str(e))
@@ -372,10 +497,19 @@ def prompt_context():
         response = {
             "system_prompt": None,
             "summary": prompt_data.get("summary", ""),
-            "context": context,
+            "facts": prompt_data.get("facts", ""),
+            "decisions": prompt_data.get("decisions", ""),
+            "context": prompt_data.get("context", context),
             "history": prompt_data.get("history", []),
-            "user_message": user_message,
+            "user_message": prompt_data.get("user_message", user_message),
             "messages": prompt_data["messages"],
+            "prompt_sections": prompt_data.get(
+                "visible_prompt_sections"
+            ) or build_prompt_sections(
+                prompt_data=prompt_data,
+                user_message=user_message,
+                context=context
+            ),
         }
         response.update(build_prompt_meta(prompt_data))
 

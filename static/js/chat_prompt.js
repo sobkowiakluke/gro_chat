@@ -1,6 +1,22 @@
 // ==========================
 // PROMPT SECTIONS
 // ==========================
+let promptMemoryDirty = false;
+let promptMemoryLoaded = false;
+
+
+function markPromptMemoryDirty() {
+    if (promptMemoryLoaded) {
+        promptMemoryDirty = true;
+    }
+}
+
+
+function resetPromptMemoryDirtyState() {
+    promptMemoryDirty = false;
+    promptMemoryLoaded = true;
+}
+
 function getPromptTextareaValue(id) {
     const el = document.getElementById(id);
     return el ? el.value : "";
@@ -19,6 +35,8 @@ function setPromptTextareaValue(id, value) {
 function clearPromptSectionEditors() {
     setPromptTextareaValue("promptSystem", "");
     setPromptTextareaValue("promptSummary", "");
+    setPromptTextareaValue("promptFacts", "");
+    setPromptTextareaValue("promptDecisions", "");
     setPromptTextareaValue("promptContext", "");
     setPromptTextareaValue("promptUser", "");
 
@@ -75,7 +93,7 @@ function addHistoryEditor(role, content) {
                 <option value="system">system</option>
             </select>
 
-            <button type="button" onclick="this.closest('.prompt-history-item').remove()">
+            <button type="button" onclick="this.closest('.prompt-history-item').remove(); markPromptMemoryDirty();">
                 Usuń
             </button>
         </div>
@@ -91,6 +109,9 @@ function addHistoryEditor(role, content) {
 
     roleSelect.value = role || "user";
     contentTextarea.value = content || "";
+
+    roleSelect.addEventListener("change", markPromptMemoryDirty);
+    contentTextarea.addEventListener("input", markPromptMemoryDirty);
 
     historyList.appendChild(item);
 }
@@ -131,6 +152,8 @@ function splitMessagesIntoSections(messages) {
     const sections = {
         system: [],
         summary: [],
+        facts: [],
+        decisions: [],
         context: [],
         history: [],
         user: ""
@@ -216,6 +239,69 @@ function fillPromptSectionEditors(messages) {
             msg.content
         );
     });
+
+    attachPromptSectionDirtyListeners();
+    resetPromptMemoryDirtyState();
+}
+
+
+function fillPromptSectionEditorsFromSections(sections) {
+    clearPromptSectionEditors();
+
+    sections = sections || {};
+
+    setPromptTextareaValue(
+        "promptSystem",
+        sections.system || ""
+    );
+
+    setPromptTextareaValue(
+        "promptSummary",
+        stripSummaryPrefix(sections.summary || "")
+    );
+
+    setPromptTextareaValue(
+        "promptFacts",
+        stripFactsPrefix(sections.facts || "")
+    );
+
+    setPromptTextareaValue(
+        "promptDecisions",
+        stripDecisionsPrefix(sections.decisions || "")
+    );
+
+    setPromptTextareaValue(
+        "promptContext",
+        sections.context || ""
+    );
+
+    setPromptTextareaValue(
+        "promptUser",
+        sections.user_message || ""
+    );
+
+    (sections.history || []).forEach((msg) => {
+        addHistoryEditor(
+            msg.role,
+            msg.content
+        );
+    });
+
+    attachPromptSectionDirtyListeners();
+    resetPromptMemoryDirtyState();
+}
+
+
+function buildPromptSectionsFromEditors() {
+    return {
+        system: getPromptTextareaValue("promptSystem").trim(),
+        summary: getPromptTextareaValue("promptSummary").trim(),
+        facts: getPromptTextareaValue("promptFacts").trim(),
+        decisions: getPromptTextareaValue("promptDecisions").trim(),
+        context: getPromptTextareaValue("promptContext").trim(),
+        history: getHistoryMessagesFromEditors(),
+        user_message: getPromptTextareaValue("promptUser").trim()
+    };
 }
 
 
@@ -224,6 +310,8 @@ function buildMessagesFromPromptSections() {
 
     const system = getPromptTextareaValue("promptSystem").trim();
     const summary = getPromptTextareaValue("promptSummary").trim();
+    const facts = getPromptTextareaValue("promptFacts").trim();
+    const decisions = getPromptTextareaValue("promptDecisions").trim();
     const context = getPromptTextareaValue("promptContext").trim();
     const user = getPromptTextareaValue("promptUser").trim();
 
@@ -271,6 +359,132 @@ function buildMessagesFromPromptSections() {
 
 function getUserMessageFromPromptSections() {
     return getPromptTextareaValue("promptUser").trim();
+}
+
+
+function attachPromptSectionDirtyListeners() {
+    [
+        "promptSystem",
+        "promptSummary",
+        "promptFacts",
+        "promptDecisions",
+        "promptContext",
+        "promptUser"
+    ].forEach((id) => {
+        const el = document.getElementById(id);
+
+        if (!el || el.dataset.promptDirtyListener === "1") {
+            return;
+        }
+
+        el.addEventListener("input", markPromptMemoryDirty);
+        el.dataset.promptDirtyListener = "1";
+    });
+}
+
+
+async function savePromptMemoryFromPopup() {
+    const conversationId = getActiveConversationId();
+
+    if (!conversationId) {
+        alert("Najpierw utwórz albo wybierz chat.");
+        return false;
+    }
+
+    const payload = getChatPayload();
+    const promptSections = buildPromptSectionsFromEditors();
+
+    let res;
+    let data;
+
+    try {
+        res = await fetch(
+            "/prompt-memory",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    conversation_id: conversationId,
+                    model: payload.model,
+                    prompt_sections: promptSections
+                })
+            }
+        );
+
+        data = await res.json();
+
+    } catch (e) {
+        alert(
+            "Nie udało się zapisać pamięci promptu.\n\n" +
+            String(e)
+        );
+        return false;
+    }
+
+    if (!res.ok) {
+        alert(
+            data.error ||
+            "Nie udało się zapisać pamięci promptu."
+        );
+        return false;
+    }
+
+    if (data.prompt_sections) {
+        fillPromptSectionEditorsFromSections(data.prompt_sections);
+    }
+
+    updatePromptMeta(data);
+    resetPromptMemoryDirtyState();
+
+    return true;
+}
+
+
+async function resetPromptMemory() {
+    const conversationId = getActiveConversationId();
+
+    if (!conversationId) {
+        alert("Najpierw utwórz albo wybierz chat.");
+        return false;
+    }
+
+    const ok = confirm(
+        "Usunąć zapisaną pamięć promptu dla tej rozmowy i wrócić do budowania z historii DB?"
+    );
+
+    if (!ok) {
+        return false;
+    }
+
+    const res = await fetch(
+        "/prompt-memory",
+        {
+            method: "DELETE",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                conversation_id: conversationId
+            })
+        }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        alert(data.error || "Nie udało się usunąć pamięci promptu.");
+        return false;
+    }
+
+    promptMemoryDirty = false;
+    promptMemoryLoaded = false;
+
+    await toggleContext();
+    await toggleContext();
+
+    return true;
 }
 
 
@@ -384,7 +598,12 @@ async function compressHistoryToSummary() {
     promptMode = "summary";
     summaryUntilMessageId = data.summary_until_message_id;
 
-    fillPromptSectionEditors(editedMessages);
+    if (data.prompt_sections) {
+        fillPromptSectionEditorsFromSections(data.prompt_sections);
+    } else {
+        fillPromptSectionEditors(editedMessages);
+    }
+
     updatePromptMeta(data);
 
     alert(

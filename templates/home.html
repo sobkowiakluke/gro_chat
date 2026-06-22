@@ -116,6 +116,25 @@
 
         </div>
 
+<div class="prompt-section">
+    <label>FACTS</label>
+    <textarea id="promptFacts" spellcheck="false"></textarea>
+</div>
+
+<div class="prompt-section">
+    <label>DECISIONS</label>
+    <textarea id="promptDecisions" spellcheck="false"></textarea>
+</div>
+
+<!-- Dodaj w stopce popupu obok przycisku Wyślij prompt. -->
+<button type="button" onclick="savePromptMemoryFromPopup()">
+    Zapisz pamięć promptu
+</button>
+
+<button type="button" onclick="resetPromptMemory()">
+    Reset pamięci promptu
+</button>
+
         <div class="prompt-actions">
             <button
                 type="button"
