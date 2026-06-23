@@ -232,8 +232,9 @@ def chat():
             touch_conversation(conversation_id)
 
             response = {
-                "reply": reply,
+                "summary": reply,
                 "summary_updated": True,
+                "summary_mode": True,
                 "summary_until_message_id": summary_until_message_id
             }
             response.update(build_prompt_meta(prompt_data))

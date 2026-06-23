@@ -17,6 +17,7 @@ function resetPromptMemoryDirtyState() {
     promptMemoryLoaded = true;
 }
 
+
 function getPromptTextareaValue(id) {
     const el = document.getElementById(id);
     return el ? el.value : "";
@@ -74,6 +75,21 @@ function stripSummaryPrefix(summary) {
         .replace(/^STRESZCZENIE STARSZEJ CZĘŚCI ROZMOWY:\n?/, "")
         .trim();
 }
+
+
+function stripFactsPrefix(facts) {
+    return (facts || "")
+        .replace(/^FAKTY USTALONE W ROZMOWIE:\n?/, "")
+        .trim();
+}
+
+
+function stripDecisionsPrefix(decisions) {
+    return (decisions || "")
+        .replace(/^DECYZJE I ZAŁOŻENIA PROJEKTOWE:\n?/, "")
+        .trim();
+}
+
 
 function addHistoryEditor(role, content) {
     const historyList = document.getElementById("promptHistory");
@@ -177,10 +193,31 @@ function splitMessagesIntoSections(messages) {
 
         if (
             role === "system" &&
-            content.startsWith("KONTEKST:")
+            content.startsWith("FAKTY USTALONE W ROZMOWIE:")
+        ) {
+            sections.facts.push(stripFactsPrefix(content));
+            return;
+        }
+
+        if (
+            role === "system" &&
+            content.startsWith("DECYZJE I ZAŁOŻENIA PROJEKTOWE:")
+        ) {
+            sections.decisions.push(stripDecisionsPrefix(content));
+            return;
+        }
+
+        if (
+            role === "system" &&
+            (
+                content.startsWith("KONTEKST:") ||
+                content.startsWith("KONTEKST ROBOCZY / WORKSPACE:")
+            )
         ) {
             sections.context.push(
-                content.replace(/^KONTEKST:\n?/, "")
+                content
+                    .replace(/^KONTEKST:\n?/, "")
+                    .replace(/^KONTEKST ROBOCZY \/ WORKSPACE:\n?/, "")
             );
             return;
         }
@@ -221,6 +258,16 @@ function fillPromptSectionEditors(messages) {
     setPromptTextareaValue(
         "promptSummary",
         sections.summary.join("\n\n---\n\n")
+    );
+
+    setPromptTextareaValue(
+        "promptFacts",
+        sections.facts.join("\n\n---\n\n")
+    );
+
+    setPromptTextareaValue(
+        "promptDecisions",
+        sections.decisions.join("\n\n---\n\n")
     );
 
     setPromptTextareaValue(
@@ -332,6 +379,20 @@ function buildMessagesFromPromptSections() {
         messages.push({
             role: "system",
             content: normalizeSummaryForPrompt(summary)
+        });
+    }
+
+    if (facts) {
+        messages.push({
+            role: "system",
+            content: "FAKTY USTALONE W ROZMOWIE:\n" + facts
+        });
+    }
+
+    if (decisions) {
+        messages.push({
+            role: "system",
+            content: "DECYZJE I ZAŁOŻENIA PROJEKTOWE:\n" + decisions
         });
     }
 
@@ -615,3 +676,111 @@ async function compressHistoryToSummary() {
 
 // ==========================
 // SEND MESSAGE
+// ==========================
+async function sendEditedPrompt() {
+    const conversationId = getActiveConversationId();
+
+    if (!conversationId) {
+        alert("Najpierw utwórz albo wybierz chat.");
+        return;
+    }
+
+    const model = getSelectedModel();
+    const promptSections = buildPromptSectionsFromEditors();
+    const finalMessages = buildMessagesFromPromptSections();
+    const userMessage = getUserMessageFromPromptSections();
+
+    if (!userMessage && promptMode !== "summary") {
+        alert("Brak wiadomości do wysłania.");
+        return;
+    }
+
+    let res;
+    let data;
+
+    try {
+        res = await fetch(
+            "/chat",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    conversation_id: conversationId,
+                    model: model,
+                    message: userMessage,
+                    messages: finalMessages,
+                    prompt_sections: promptSections,
+                    summary_mode: promptMode === "summary",
+                    summary_until_message_id: summaryUntilMessageId,
+                    persist_prompt_memory: promptMemoryDirty
+                })
+            }
+        );
+
+        data = await res.json();
+
+    } catch (e) {
+        showApiErrorPopup(
+            "Nie udało się połączyć z backendem Flask.\n" +
+            String(e)
+        );
+        return;
+    }
+
+    if (!res.ok) {
+        showApiErrorPopup(
+            data.error ||
+            data.reply ||
+            "Błąd API Groq."
+        );
+        return;
+    }
+
+    if (data.summary_mode || data.summary_updated) {
+        setPromptTextareaValue(
+            "promptSummary",
+            data.summary || data.reply || ""
+        );
+
+        promptMode = "chat";
+        summaryUntilMessageId = null;
+
+        updatePromptMeta(data);
+        resetPromptMemoryDirtyState();
+
+        if (typeof schedulePromptTokenEstimateUpdate === "function") {
+            schedulePromptTokenEstimateUpdate();
+        }
+
+        alert("Summary zostało zapisane i wstawione do sekcji summary promptu.");
+
+        return;
+    }
+
+    if (data.reply) {
+        if (typeof addMessage === "function") {
+            addMessage("assistant", data.reply);
+        } else if (typeof appendMessage === "function") {
+            appendMessage("assistant", data.reply);
+        } else if (typeof renderMessage === "function") {
+            renderMessage("assistant", data.reply);
+        }
+    }
+
+    promptMode = "chat";
+    summaryUntilMessageId = null;
+
+    if (typeof closeContextModal === "function") {
+        closeContextModal();
+    }
+
+    if (typeof loadMessages === "function") {
+        await loadMessages(conversationId);
+    }
+
+    if (typeof schedulePromptTokenEstimateUpdate === "function") {
+        schedulePromptTokenEstimateUpdate();
+    }
+}
