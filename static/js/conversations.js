@@ -149,6 +149,10 @@ async function loadConversations() {
 
         await loadConversationMessages(null);
 
+        if (typeof schedulePromptTokenEstimateUpdate === "function") {
+            schedulePromptTokenEstimateUpdate();
+        }
+
         return;
     }
 
@@ -182,6 +186,10 @@ async function loadConversations() {
     await loadConversationMessages(
         selectedId
     );
+
+    if (typeof schedulePromptTokenEstimateUpdate === "function") {
+        schedulePromptTokenEstimateUpdate();
+    }
 }
 
 
@@ -276,6 +284,10 @@ document.addEventListener(
                     await loadConversationMessages(
                         window.activeConversationId
                     );
+
+                    if (typeof schedulePromptTokenEstimateUpdate === "function") {
+                        schedulePromptTokenEstimateUpdate();
+                    }
                 }
             );
         }

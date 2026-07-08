@@ -325,7 +325,7 @@ def summary_context():
 
         if not prompt_data.get("messages"):
             return jsonify({
-                "error": "Brak starszej historii do streszczenia."
+                "error": "Brak historii do streszczenia."
             }), 400
 
         response = {

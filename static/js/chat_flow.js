@@ -57,7 +57,7 @@ async function sendMsg() {
 
     if (finalPromptSections) {
         payload.prompt_sections = finalPromptSections;
-        payload.persist_prompt_memory = true;
+        payload.persist_prompt_memory = promptMemoryDirty;
     } else if (finalMessages) {
         payload.messages = finalMessages;
     }
@@ -103,15 +103,20 @@ async function sendMsg() {
         return;
     }
 
-    if (promptMode === "summary") {
-        alert("Summary zostało zaktualizowane.");
+    if (promptMode === "summary" || data.summary_updated) {
+        setPromptTextareaValue(
+            "promptSummary",
+            data.summary || ""
+        );
+
         editedMessages = null;
         promptMode = "chat";
         summaryUntilMessageId = null;
-        clearPromptSectionEditors();
         promptMemoryDirty = false;
-        closeContextModal();
+        updatePromptMeta(data);
         schedulePromptTokenEstimateUpdate();
+
+        alert("Summary zostało zapisane w sekcji SUMMARY promptu.");
         return;
     }
 
@@ -151,6 +156,7 @@ async function sendMsg() {
 
     clearPromptSectionEditors();
     closeContextModal();
+    schedulePromptTokenEstimateUpdate();
 }
 async function toggleContext() {
     const modal = document.getElementById("contextModal");

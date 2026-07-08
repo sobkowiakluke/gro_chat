@@ -114,26 +114,33 @@
                 ></textarea>
             </section>
 
+            <section class="prompt-section prompt-section-facts">
+                <label>FACTS</label>
+                <textarea
+                    id="promptFacts"
+                    spellcheck="false"
+                ></textarea>
+            </section>
+
+            <section class="prompt-section prompt-section-decisions">
+                <label>DECISIONS</label>
+                <textarea
+                    id="promptDecisions"
+                    spellcheck="false"
+                ></textarea>
+            </section>
+
         </div>
 
-<div class="prompt-section">
-    <label>FACTS</label>
-    <textarea id="promptFacts" spellcheck="false"></textarea>
-</div>
+        <div class="prompt-actions prompt-memory-actions">
+            <button type="button" onclick="savePromptMemoryFromPopup()">
+                Zapisz pamięć promptu
+            </button>
 
-<div class="prompt-section">
-    <label>DECISIONS</label>
-    <textarea id="promptDecisions" spellcheck="false"></textarea>
-</div>
-
-<!-- Dodaj w stopce popupu obok przycisku Wyślij prompt. -->
-<button type="button" onclick="savePromptMemoryFromPopup()">
-    Zapisz pamięć promptu
-</button>
-
-<button type="button" onclick="resetPromptMemory()">
-    Reset pamięci promptu
-</button>
+            <button type="button" onclick="resetPromptMemory()">
+                Reset pamięci promptu
+            </button>
+        </div>
 
         <div class="prompt-actions">
             <button
@@ -152,7 +159,7 @@
 
             <button
                 type="button"
-                onclick="sendMsg()"
+                onclick="sendEditedPrompt()"
             >
                 Wyślij prompt
             </button>

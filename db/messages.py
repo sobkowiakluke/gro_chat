@@ -152,6 +152,37 @@ def get_old_messages_for_summary(
 
     return rows
 
+
+def get_messages_for_manual_summary(
+    conversation_id,
+    after_id=0
+):
+    conn = get_conn()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute("""
+        SELECT
+            id,
+            role,
+            content,
+            created_at
+        FROM messages
+        WHERE conversation_id = %s
+          AND id > %s
+          AND role IN ('user', 'assistant')
+        ORDER BY id ASC
+    """, (
+        conversation_id,
+        after_id or 0
+    ))
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return rows
+
 def get_messages_after_id(
     conversation_id,
     after_id=0,

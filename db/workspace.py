@@ -1,3 +1,6 @@
+from db.connection import get_conn
+
+
 def get_workspace(conversation_id):
     conn = get_conn()
     cur = conn.cursor(dictionary=True)

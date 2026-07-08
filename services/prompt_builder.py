@@ -9,6 +9,7 @@ from db.messages import (
     get_recent_messages,
     get_messages_after_id,
     get_old_messages_for_summary,
+    get_messages_for_manual_summary,
 )
 
 from db.conversations import get_conversation_summary
@@ -492,10 +493,14 @@ def build_summary_prompt_for_conversation(
 ):
     memory = load_prompt_memory(conversation_id)
 
-    messages_to_summarize = get_old_messages_for_summary(
+    # Ręczny przycisk "History → Summary" powinien streszczać realną
+    # historię rozmowy od ostatniego zapisanego summary, a nie tylko
+    # wiadomości starsze niż ostatnie SUMMARY_KEEP_LAST_MESSAGES. Ten drugi
+    # tryb jest dobry dla automatycznej kompresji, ale dla ręcznego przycisku
+    # dawał mylące "Brak starszej historii" przy krótszych rozmowach.
+    messages_to_summarize = get_messages_for_manual_summary(
         conversation_id=conversation_id,
-        summarized_until_message_id=memory["summarized_until_message_id"],
-        keep_last=SUMMARY_KEEP_LAST_MESSAGES
+        after_id=memory["summarized_until_message_id"]
     )
 
     if not messages_to_summarize:

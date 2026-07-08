@@ -759,26 +759,26 @@ async function sendEditedPrompt() {
         return;
     }
 
-    if (data.reply) {
-        if (typeof addMessage === "function") {
-            addMessage("assistant", data.reply);
-        } else if (typeof appendMessage === "function") {
-            appendMessage("assistant", data.reply);
-        } else if (typeof renderMessage === "function") {
-            renderMessage("assistant", data.reply);
-        }
-    }
-
     promptMode = "chat";
     summaryUntilMessageId = null;
+    editedMessages = null;
+    promptMemoryDirty = false;
+
+    const input = document.getElementById("msg");
+
+    if (input) {
+        input.value = "";
+    }
 
     if (typeof closeContextModal === "function") {
         closeContextModal();
     }
 
-    if (typeof loadMessages === "function") {
-        await loadMessages(conversationId);
+    if (typeof loadConversationMessages === "function") {
+        await loadConversationMessages(conversationId);
     }
+
+    clearPromptSectionEditors();
 
     if (typeof schedulePromptTokenEstimateUpdate === "function") {
         schedulePromptTokenEstimateUpdate();

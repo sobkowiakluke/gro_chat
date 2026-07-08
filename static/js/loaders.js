@@ -7,6 +7,14 @@ async function loadFile(path) {
 `FILE: ${data.path}
 
 ${data.content}`;
+
+    if (typeof schedulePromptTokenEstimateUpdate === "function") {
+        schedulePromptTokenEstimateUpdate();
+    }
+
+    if (typeof schedulePromptTokenEstimateUpdate === "function") {
+        schedulePromptTokenEstimateUpdate();
+    }
 }
 
 async function loadFunction(path, name) {
