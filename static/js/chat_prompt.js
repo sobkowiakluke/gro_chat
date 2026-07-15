@@ -9,6 +9,10 @@ function markPromptMemoryDirty() {
     if (promptMemoryLoaded) {
         promptMemoryDirty = true;
     }
+
+    if (typeof schedulePromptTokenEstimateUpdate === "function") {
+        schedulePromptTokenEstimateUpdate();
+    }
 }
 
 
@@ -559,9 +563,14 @@ function updatePromptMeta(data) {
     const parts = [];
 
     if (data.tokens_estimate !== undefined && data.token_budget !== undefined) {
-        parts.push(
-            `tokeny: ${data.tokens_estimate} / ${data.token_budget}`
-        );
+        const budgetLabel = data.prompt_over_budget
+            ? `PRZEKROCZONO: ${data.tokens_estimate} / ${data.token_budget}`
+            : `tokeny: ${data.tokens_estimate} / ${data.token_budget}`;
+        parts.push(budgetLabel);
+    }
+
+    if (data.prompt_excess_tokens) {
+        parts.push(`nadmiar: ${data.prompt_excess_tokens}`);
     }
 
     if (data.prompt_source) {
@@ -710,7 +719,6 @@ async function sendEditedPrompt() {
                     conversation_id: conversationId,
                     model: model,
                     message: userMessage,
-                    messages: finalMessages,
                     prompt_sections: promptSections,
                     summary_mode: promptMode === "summary",
                     summary_until_message_id: summaryUntilMessageId,

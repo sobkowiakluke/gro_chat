@@ -144,13 +144,11 @@ def build_messages_from_prompt_sections(sections):
 
 
 def build_prompt_sections(prompt_data, user_message="", context=""):
-    """
-    Sekcje widoczne w popupie.
+    """Sekcje odpowiadające dokładnie promptowi przygotowanemu do wysyłki.
 
-    Ważne: to NIE musi być dokładnie ta sama lista, która finalnie idzie do LLM.
-    Popup ma pokazywać stan źródłowy pamięci rozmowy: summary, fakty,
-    decyzje, kontekst i historię. Dopiero osobny etap buduje/przycina
-    finalne messages do budżetu modelu.
+    Historia i summary mogą być wcześniej ograniczone przez budżet modelu.
+    Dzięki temu niezmodyfikowany popup odtwarza tę samą listę messages,
+    która zostałaby wysłana bez otwierania popupu.
     """
     return {
         "system": prompt_data.get("system") or SYSTEM_PROMPT,
@@ -160,25 +158,6 @@ def build_prompt_sections(prompt_data, user_message="", context=""):
         "context": prompt_data.get("context") or context or "",
         "history": prompt_data.get("history") or [],
         "user_message": user_message or prompt_data.get("user_message") or ""
-    }
-
-
-def build_visible_prompt_sections(memory, user_message=""):
-    """
-    Buduje sekcje przeznaczone do popupu z nieprzyciętej pamięci rozmowy.
-
-    build_prompt_within_budget() może skrócić summary albo ograniczyć historię
-    do zera. To jest poprawne dla wysyłki do LLM, ale błędne dla popupu,
-    który ma być edytorem/podglądem całego dostępnego kontekstu rozmowy.
-    """
-    return {
-        "system": memory.get("system") or SYSTEM_PROMPT,
-        "summary": memory.get("summary") or "",
-        "facts": memory.get("facts") or "",
-        "decisions": memory.get("decisions") or "",
-        "context": memory.get("context") or "",
-        "history": memory.get("history") or [],
-        "user_message": user_message or ""
     }
 
 
@@ -458,11 +437,10 @@ def build_prompt_for_conversation(
     ]
     prompt_data["model"] = model
 
-    # Sekcje do popupu muszą pochodzić z nieprzyciętej pamięci rozmowy.
-    # prompt_data["history"] może być już przycięte do budżetu modelu.
-    prompt_data["visible_prompt_sections"] = build_visible_prompt_sections(
-        memory=memory,
-        user_message=effective_user_message
+    prompt_data["prompt_sections"] = build_prompt_sections(
+        prompt_data=prompt_data,
+        user_message=effective_user_message,
+        context=prompt_data.get("context", "")
     )
 
     return prompt_data

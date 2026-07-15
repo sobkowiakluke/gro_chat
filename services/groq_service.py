@@ -1,4 +1,5 @@
 import math
+import time
 
 from groq import Groq
 
@@ -7,6 +8,13 @@ from utils.debug import debug
 
 
 client = Groq(api_key=GROQ_API_KEY)
+
+
+MODEL_CACHE_TTL_SECONDS = 300
+_model_cache = {
+    "loaded_at": 0.0,
+    "models": []
+}
 
 
 SYSTEM_PROMPT = (
@@ -45,16 +53,50 @@ def is_text_chat_model(model_id):
 # MODELS
 # =========================
 
-def get_models():
+def get_models(force_refresh=False):
+    now = time.monotonic()
+    cached_models = _model_cache["models"]
+    cache_is_fresh = (
+        cached_models
+        and now - _model_cache["loaded_at"] < MODEL_CACHE_TTL_SECONDS
+    )
+
+    if cache_is_fresh and not force_refresh:
+        return list(cached_models)
+
     model_list = client.models.list()
 
-    models = [
+    models = sorted(
         m.id
         for m in model_list.data
         if is_text_chat_model(m.id)
-    ]
+    )
 
-    return sorted(models)
+    _model_cache["models"] = models
+    _model_cache["loaded_at"] = now
+
+    return list(models)
+
+
+def validate_chat_model(model):
+    model = str(model or "").strip()
+
+    if not model:
+        raise ValueError("Nie wybrano modelu.")
+
+    if not is_text_chat_model(model):
+        raise ValueError(
+            f"Model {model!r} nie jest dozwolonym modelem tekstowym."
+        )
+
+    available_models = get_models()
+
+    if model not in available_models:
+        raise ValueError(
+            f"Model {model!r} nie jest obecnie dostępny w Groq."
+        )
+
+    return model
 
 
 # =========================

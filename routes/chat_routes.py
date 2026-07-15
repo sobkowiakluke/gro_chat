@@ -11,7 +11,8 @@ from services.groq_service import (
     send_chat,
     get_models,
     estimate_tokens,
-    get_usable_prompt_budget
+    get_usable_prompt_budget,
+    validate_chat_model
 )
 
 from services.prompt_builder import (
@@ -44,6 +45,62 @@ chat_bp = Blueprint(
 )
 
 
+def validate_prompt_messages(messages, model):
+    if not isinstance(messages, list) or not messages:
+        raise ValueError("Prompt jest pusty.")
+
+    normalized = []
+
+    for index, msg in enumerate(messages):
+        if not isinstance(msg, dict):
+            raise ValueError(
+                f"Nieprawidłowa wiadomość promptu na pozycji {index}."
+            )
+
+        role = msg.get("role")
+        content = str(msg.get("content") or "").strip()
+
+        if role not in ["system", "user", "assistant"]:
+            raise ValueError(
+                f"Nieprawidłowa rola promptu na pozycji {index}: {role!r}."
+            )
+
+        if not content:
+            continue
+
+        normalized.append({
+            "role": role,
+            "content": content
+        })
+
+    if not normalized:
+        raise ValueError("Prompt nie zawiera żadnej niepustej wiadomości.")
+
+    tokens_estimate = estimate_tokens(normalized)
+    token_budget = get_usable_prompt_budget(model)
+
+    if tokens_estimate > token_budget:
+        excess = tokens_estimate - token_budget
+        error = ValueError(
+            "Edytowany prompt przekracza bezpieczny budżet modelu. "
+            f"Estymacja: {tokens_estimate} tokenów, budżet: {token_budget}, "
+            f"przekroczenie: {excess}. Skróć HISTORY, SUMMARY, CONTEXT "
+            "albo USER MESSAGE."
+        )
+        error.tokens_estimate = tokens_estimate
+        error.token_budget = token_budget
+        error.prompt_excess_tokens = excess
+        raise error
+
+    return normalized, tokens_estimate, token_budget
+
+
+def validate_requested_model(data):
+    return validate_chat_model(
+        data.get("model", "llama-3.1-8b-instant")
+    )
+
+
 def build_prompt_meta(prompt_data):
     return {
         "prompt_tokens_estimate": prompt_data.get("tokens_estimate"),
@@ -64,7 +121,9 @@ def build_prompt_meta(prompt_data):
         "prompt_source": prompt_data.get("prompt_source"),
         "summarized_until_message_id": prompt_data.get("summarized_until_message_id"),
         "summary_until_message_id": prompt_data.get("summary_until_message_id"),
-        "model": prompt_data.get("model")
+        "model": prompt_data.get("model"),
+        "prompt_over_budget": bool(prompt_data.get("prompt_over_budget")),
+        "prompt_excess_tokens": prompt_data.get("prompt_excess_tokens")
     }
 
 
@@ -116,10 +175,12 @@ def chat():
                 "reply": "Brak aktywnego chatu."
             }), 400
 
-        model = data.get(
-            "model",
-            "llama-3.1-8b-instant"
-        )
+        try:
+            model = validate_requested_model(data)
+        except ValueError as e:
+            return jsonify({
+                "error": str(e)
+            }), 400
 
         user_message = (
             data.get("message") or ""
@@ -143,24 +204,23 @@ def chat():
         )
 
         if prompt_sections:
-            if data.get("persist_prompt_memory"):
-                save_prompt_memory(
-                    conversation_id=conversation_id,
-                    sections=prompt_sections
-                )
-
             final_messages = build_messages_from_prompt_sections(prompt_sections)
+            final_messages, tokens_estimate, token_budget = validate_prompt_messages(
+                final_messages,
+                model
+            )
             prompt_data = {
                 "messages": final_messages,
                 "prompt_sections": prompt_sections,
-                "tokens_estimate": estimate_tokens(final_messages),
-                "token_budget": get_usable_prompt_budget(model),
+                "tokens_estimate": tokens_estimate,
+                "token_budget": token_budget,
                 "history_limit": None,
                 "history_messages_loaded": None,
                 "history_messages_used": len(prompt_sections.get("history") or []),
                 "summary_token_limit": None,
                 "summary_was_trimmed": False,
                 "summary_used": bool(prompt_sections.get("summary")),
+                "prompt_over_budget": False,
                 "prompt_source": (
                     "edited_summary_sections_from_popup"
                     if summary_mode
@@ -173,11 +233,14 @@ def chat():
                 "model": model
             }
         elif edited_messages:
-            final_messages = edited_messages
+            final_messages, tokens_estimate, token_budget = validate_prompt_messages(
+                edited_messages,
+                model
+            )
             prompt_data = {
                 "messages": final_messages,
-                "tokens_estimate": estimate_tokens(final_messages),
-                "token_budget": get_usable_prompt_budget(model),
+                "tokens_estimate": tokens_estimate,
+                "token_budget": token_budget,
                 "history_limit": None,
                 "history_messages_loaded": None,
                 "history_messages_used": None,
@@ -186,6 +249,7 @@ def chat():
                 "summary_used": bool(
                     extract_summary_from_messages(final_messages)
                 ),
+                "prompt_over_budget": False,
                 "prompt_source": (
                     "edited_summary_prompt_from_popup"
                     if summary_mode
@@ -206,8 +270,22 @@ def chat():
             )
             final_messages = prompt_data["messages"]
 
-        # Do tego momentu nic nie jest zapisane w historii wiadomości.
-        # Jeżeli Groq zwróci błąd, user_message nie trafi do historii.
+        if summary_mode and data.get("summary_until_message_id") is None:
+            return jsonify({
+                "error": "Brak summary_until_message_id dla trybu summary."
+            }), 400
+
+        # Zapis prompt_memory jest świadomą operacją użytkownika i może nastąpić
+        # przed wywołaniem Groq. Historia wiadomości nadal jest zapisywana dopiero
+        # po poprawnej odpowiedzi modelu.
+        if prompt_sections and data.get("persist_prompt_memory"):
+            save_prompt_memory(
+                conversation_id=conversation_id,
+                sections=prompt_sections
+            )
+
+        # Wiadomość użytkownika i odpowiedź asystenta są zapisywane dopiero
+        # po poprawnej odpowiedzi Groq. Przy błędzie API historia pozostaje bez zmian.
         reply = send_chat(
             model=model,
             messages=final_messages
@@ -217,11 +295,6 @@ def chat():
             summary_until_message_id = data.get(
                 "summary_until_message_id"
             )
-
-            if summary_until_message_id is None:
-                return jsonify({
-                    "error": "Brak summary_until_message_id dla trybu summary."
-                }), 400
 
             update_conversation_summary(
                 conv_id=conversation_id,
@@ -285,6 +358,27 @@ def chat():
 
         return jsonify(response)
 
+    except ValueError as e:
+        response = {
+            "reply": "Nie można wysłać promptu.",
+            "error": str(e)
+        }
+
+        for field in [
+            "tokens_estimate",
+            "token_budget",
+            "prompt_excess_tokens"
+        ]:
+            value = getattr(e, field, None)
+            if value is not None:
+                response[field] = value
+
+        response["prompt_over_budget"] = bool(
+            getattr(e, "prompt_excess_tokens", None)
+        )
+
+        return jsonify(response), 400
+
     except Exception as e:
         print(str(e))
         print(traceback.format_exc())
@@ -313,10 +407,12 @@ def summary_context():
                 "error": "Brak aktywnego chatu."
             }), 400
 
-        model = data.get(
-            "model",
-            "llama-3.1-8b-instant"
-        )
+        try:
+            model = validate_requested_model(data)
+        except ValueError as e:
+            return jsonify({
+                "error": str(e)
+            }), 400
 
         prompt_data = build_summary_prompt_for_conversation(
             conversation_id=conversation_id,
@@ -364,7 +460,37 @@ def prompt_memory_save():
                 "error": "Brak aktywnego chatu."
             }), 400
 
+        try:
+            model = validate_requested_model(data)
+        except ValueError as e:
+            return jsonify({
+                "error": str(e)
+            }), 400
+
         prompt_sections = data.get("prompt_sections") or {}
+        candidate_messages = build_messages_from_prompt_sections(prompt_sections)
+
+        try:
+            _, tokens_estimate, token_budget = validate_prompt_messages(
+                candidate_messages,
+                model
+            )
+        except ValueError as e:
+            response = {
+                "error": str(e),
+                "prompt_over_budget": bool(
+                    getattr(e, "prompt_excess_tokens", None)
+                )
+            }
+            for field in [
+                "tokens_estimate",
+                "token_budget",
+                "prompt_excess_tokens"
+            ]:
+                value = getattr(e, field, None)
+                if value is not None:
+                    response[field] = value
+            return jsonify(response), 400
 
         saved = save_prompt_memory(
             conversation_id=conversation_id,
@@ -377,10 +503,9 @@ def prompt_memory_save():
             "saved": True,
             "prompt_sections": saved,
             "messages": final_messages,
-            "tokens_estimate": estimate_tokens(final_messages),
-            "token_budget": get_usable_prompt_budget(
-                data.get("model", "llama-3.1-8b-instant")
-            ),
+            "tokens_estimate": tokens_estimate,
+            "token_budget": token_budget,
+            "prompt_over_budget": False,
             "prompt_source": "saved_prompt_memory"
         })
 
@@ -473,10 +598,12 @@ def prompt_context():
                 "error": "Brak aktywnego chatu."
             }), 400
 
-        model = data.get(
-            "model",
-            "llama-3.1-8b-instant"
-        )
+        try:
+            model = validate_requested_model(data)
+        except ValueError as e:
+            return jsonify({
+                "error": str(e)
+            }), 400
 
         user_message = data.get(
             "message",
@@ -487,13 +614,43 @@ def prompt_context():
             "context",
             ""
         )
+        prompt_sections = data.get("prompt_sections")
 
-        prompt_data = build_prompt_for_conversation(
-            conversation_id=conversation_id,
-            user_message=user_message,
-            context=context,
-            model=model
-        )
+        if prompt_sections is not None:
+            final_messages = build_messages_from_prompt_sections(prompt_sections)
+            tokens_estimate = estimate_tokens(final_messages)
+            token_budget = get_usable_prompt_budget(model)
+            prompt_data = {
+                "messages": final_messages,
+                "prompt_sections": prompt_sections,
+                "system": prompt_sections.get("system", ""),
+                "summary": prompt_sections.get("summary", ""),
+                "facts": prompt_sections.get("facts", ""),
+                "decisions": prompt_sections.get("decisions", ""),
+                "context": prompt_sections.get("context", ""),
+                "history": prompt_sections.get("history", []),
+                "user_message": prompt_sections.get("user_message", ""),
+                "tokens_estimate": tokens_estimate,
+                "token_budget": token_budget,
+                "history_messages_used": len(
+                    prompt_sections.get("history") or []
+                ),
+                "summary_used": bool(prompt_sections.get("summary")),
+                "prompt_over_budget": tokens_estimate > token_budget,
+                "prompt_excess_tokens": max(
+                    0,
+                    tokens_estimate - token_budget
+                ),
+                "prompt_source": "edited_sections_preview",
+                "model": model
+            }
+        else:
+            prompt_data = build_prompt_for_conversation(
+                conversation_id=conversation_id,
+                user_message=user_message,
+                context=context,
+                model=model
+            )
 
         response = {
             "system_prompt": None,
@@ -505,7 +662,7 @@ def prompt_context():
             "user_message": prompt_data.get("user_message", user_message),
             "messages": prompt_data["messages"],
             "prompt_sections": prompt_data.get(
-                "visible_prompt_sections"
+                "prompt_sections"
             ) or build_prompt_sections(
                 prompt_data=prompt_data,
                 user_message=user_message,

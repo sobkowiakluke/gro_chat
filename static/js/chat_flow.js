@@ -295,6 +295,13 @@ async function updatePromptTokenEstimate() {
         return;
     }
 
+    const modal = document.getElementById("contextModal");
+    const popupIsOpen = modal && !modal.classList.contains("hidden");
+
+    if (popupIsOpen && typeof buildPromptSectionsFromEditors === "function") {
+        payload.prompt_sections = buildPromptSectionsFromEditors();
+    }
+
     try {
         const res = await fetch(
             "/prompt-context",
@@ -319,7 +326,9 @@ async function updatePromptTokenEstimate() {
 
         if (estimate !== null && budget !== null) {
             setPromptTokenEstimate(
-                `tokeny: ${estimate} / ${budget}`
+                data.prompt_over_budget
+                    ? `tokeny: ${estimate} / ${budget} — PRZEKROCZONO`
+                    : `tokeny: ${estimate} / ${budget}`
             );
         } else if (estimate !== null) {
             setPromptTokenEstimate(
@@ -327,6 +336,10 @@ async function updatePromptTokenEstimate() {
             );
         } else {
             setPromptTokenEstimate("tokeny: —");
+        }
+
+        if (popupIsOpen && typeof updatePromptMeta === "function") {
+            updatePromptMeta(data);
         }
 
     } catch (e) {
