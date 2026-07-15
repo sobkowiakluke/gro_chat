@@ -607,6 +607,10 @@ function updatePromptMeta(data) {
         parts.push("summary przycięte");
     }
 
+    if (data.summary_messages_remaining !== undefined && data.summary_messages_remaining !== null) {
+        parts.push(`pozostało do summary: ${data.summary_messages_remaining}`);
+    }
+
     meta.innerText = parts.join(" | ");
 }
 
@@ -676,9 +680,14 @@ async function compressHistoryToSummary() {
 
     updatePromptMeta(data);
 
+    const batchInfo = data.summary_has_more
+        ? ` Ta porcja obejmuje ${data.history_messages_used} z ${data.history_messages_loaded} wiadomości. Po zapisaniu pozostanie ${data.summary_messages_remaining}.`
+        : ` Ta porcja obejmuje wszystkie ${data.history_messages_used} wiadomości oczekujące na summary.`;
+
     alert(
-        "Payload summary jest widoczny w popupie. " +
-        "Sprawdź go i kliknij »Wyślij prompt«, jeżeli ma zostać wysłany do LLM."
+        "Payload summary jest widoczny w popupie." +
+        batchInfo +
+        " Sprawdź go i kliknij »Wyślij prompt«, jeżeli ma zostać wysłany do LLM."
     );
 }
 
@@ -762,7 +771,12 @@ async function sendEditedPrompt() {
             schedulePromptTokenEstimateUpdate();
         }
 
-        alert("Summary zostało zapisane i wstawione do sekcji summary promptu.");
+        const remaining = Number(data.summary_messages_remaining || 0);
+        alert(
+            remaining > 0
+                ? `Summary porcji zostało zapisane. Pozostało ${remaining} wiadomości; użyj ponownie History → Summary.`
+                : "Summary zostało zapisane i obejmuje całą oczekującą historię."
+        );
 
         return;
     }

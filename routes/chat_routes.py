@@ -30,12 +30,14 @@ from db.prompt_memory import (
 
 from db.messages import (
     insert_message,
-    get_last_message_id
+    get_last_message_id,
+    count_messages_after_id
 )
 
 from db.conversations import (
     touch_conversation,
-    update_conversation_summary
+    update_conversation_summary,
+    get_conversation_summary
 )
 
 
@@ -123,7 +125,11 @@ def build_prompt_meta(prompt_data):
         "summary_until_message_id": prompt_data.get("summary_until_message_id"),
         "model": prompt_data.get("model"),
         "prompt_over_budget": bool(prompt_data.get("prompt_over_budget")),
-        "prompt_excess_tokens": prompt_data.get("prompt_excess_tokens")
+        "prompt_excess_tokens": prompt_data.get("prompt_excess_tokens"),
+        "summary_messages_remaining": prompt_data.get("summary_messages_remaining"),
+        "summary_has_more": bool(prompt_data.get("summary_has_more")),
+        "summary_batch_first_message_id": prompt_data.get("summary_batch_first_message_id"),
+        "summary_batch_last_message_id": prompt_data.get("summary_batch_last_message_id")
     }
 
 
@@ -155,6 +161,56 @@ def persist_visible_summary_if_present(
     )
 
     return True
+
+
+def validate_summary_request(conversation_id, summary_until_message_id):
+    try:
+        marker = int(summary_until_message_id)
+    except (TypeError, ValueError):
+        raise ValueError("Nieprawidłowy summary_until_message_id.")
+
+    summary_state = get_conversation_summary(conversation_id)
+    current_marker = int(summary_state.get("summarized_until_message_id") or 0)
+    last_message_id = int(get_last_message_id(conversation_id) or 0)
+
+    if marker <= current_marker:
+        raise ValueError(
+            "Zakres summary nie zawiera nowych wiadomości albo został już zapisany."
+        )
+
+    if marker > last_message_id:
+        raise ValueError(
+            "Zakres summary wykracza poza aktualną historię rozmowy."
+        )
+
+    return marker
+
+
+def validate_summary_reply(reply):
+    reply = str(reply or "").strip()
+
+    if not reply:
+        raise ValueError("Model zwrócił puste summary.")
+
+    required_headings = [
+        "## Aktualny stan projektu",
+        "## Fakty i wymagania użytkownika",
+        "## Podjęte decyzje",
+        "## Architektura i istotne pliki",
+        "## Wykonane poprawki i napotkane błędy",
+        "## Otwarte zadania i następne kroki",
+        "## Nierozstrzygnięte kwestie",
+    ]
+
+    missing = [heading for heading in required_headings if heading not in reply]
+
+    if missing:
+        raise ValueError(
+            "Model zwrócił summary w niepełnej strukturze. Brakuje sekcji: "
+            + ", ".join(missing)
+        )
+
+    return reply
 
 
 # =========================
@@ -270,10 +326,13 @@ def chat():
             )
             final_messages = prompt_data["messages"]
 
-        if summary_mode and data.get("summary_until_message_id") is None:
-            return jsonify({
-                "error": "Brak summary_until_message_id dla trybu summary."
-            }), 400
+        summary_until_message_id = None
+
+        if summary_mode:
+            summary_until_message_id = validate_summary_request(
+                conversation_id=conversation_id,
+                summary_until_message_id=data.get("summary_until_message_id")
+            )
 
         # Zapis prompt_memory jest świadomą operacją użytkownika i może nastąpić
         # przed wywołaniem Groq. Historia wiadomości nadal jest zapisywana dopiero
@@ -292,25 +351,33 @@ def chat():
         )
 
         if summary_mode:
-            summary_until_message_id = data.get(
-                "summary_until_message_id"
-            )
+            reply = validate_summary_reply(reply)
 
+            # Summary i marker są zapisywane jednym UPDATE dopiero po poprawnej
+            # odpowiedzi modelu i walidacji struktury wyniku.
             update_conversation_summary(
                 conv_id=conversation_id,
                 summary=reply,
                 summarized_until_message_id=summary_until_message_id
             )
 
-            touch_conversation(conversation_id)
+            remaining_messages = count_messages_after_id(
+                conversation_id=conversation_id,
+                after_id=summary_until_message_id
+            )
 
             response = {
                 "summary": reply,
                 "summary_updated": True,
                 "summary_mode": True,
-                "summary_until_message_id": summary_until_message_id
+                "summary_until_message_id": summary_until_message_id,
+                "summary_messages_remaining": remaining_messages,
+                "summary_has_more": remaining_messages > 0
             }
-            response.update(build_prompt_meta(prompt_data))
+            prompt_meta = build_prompt_meta(prompt_data)
+            prompt_meta["summary_messages_remaining"] = remaining_messages
+            prompt_meta["summary_has_more"] = remaining_messages > 0
+            response.update(prompt_meta)
 
             return jsonify(response)
 

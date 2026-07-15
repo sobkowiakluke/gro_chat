@@ -97,62 +97,6 @@ def get_recent_messages(
     return rows
 
 
-def get_old_messages_for_summary(
-    conversation_id,
-    summarized_until_message_id,
-    keep_last=10
-):
-    conn = get_conn()
-    cur = conn.cursor(dictionary=True)
-
-    cur.execute("""
-        SELECT id
-        FROM messages
-        WHERE conversation_id = %s
-        ORDER BY id DESC
-        LIMIT %s
-    """, (
-        conversation_id,
-        keep_last
-    ))
-
-    recent_rows = cur.fetchall()
-
-    if len(recent_rows) < keep_last:
-        cur.close()
-        conn.close()
-        return []
-
-    oldest_recent_id = min(
-        row["id"] for row in recent_rows
-    )
-
-    cur.execute("""
-        SELECT
-            id,
-            role,
-            content,
-            created_at
-        FROM messages
-        WHERE conversation_id = %s
-          AND id > %s
-          AND id < %s
-          AND role IN ('user', 'assistant')
-        ORDER BY id ASC
-    """, (
-        conversation_id,
-        summarized_until_message_id or 0,
-        oldest_recent_id
-    ))
-
-    rows = cur.fetchall()
-
-    cur.close()
-    conn.close()
-
-    return rows
-
-
 def get_messages_for_manual_summary(
     conversation_id,
     after_id=0
@@ -235,3 +179,26 @@ def get_last_message_id(conversation_id):
 
     return row.get("last_id") or 0
 
+
+
+def count_messages_after_id(conversation_id, after_id=0):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM messages
+            WHERE conversation_id = %s
+              AND id > %s
+              AND role IN ('user', 'assistant')
+        """, (
+            conversation_id,
+            after_id or 0
+        ))
+
+        row = cur.fetchone()
+        return int(row[0] if row else 0)
+    finally:
+        cur.close()
+        conn.close()

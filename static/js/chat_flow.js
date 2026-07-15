@@ -116,7 +116,12 @@ async function sendMsg() {
         updatePromptMeta(data);
         schedulePromptTokenEstimateUpdate();
 
-        alert("Summary zostało zapisane w sekcji SUMMARY promptu.");
+        const remaining = Number(data.summary_messages_remaining || 0);
+        alert(
+            remaining > 0
+                ? `Summary porcji zostało zapisane. Pozostało ${remaining} wiadomości; użyj ponownie History → Summary.`
+                : "Summary zostało zapisane i obejmuje całą oczekującą historię."
+        );
         return;
     }
 

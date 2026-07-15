@@ -8,7 +8,6 @@ from services.groq_service import (
 from db.messages import (
     get_recent_messages,
     get_messages_after_id,
-    get_old_messages_for_summary,
     get_messages_for_manual_summary,
 )
 
@@ -18,7 +17,6 @@ from db.prompt_memory import get_prompt_memory
 
 MAX_HISTORY_WITHOUT_SUMMARY = 40
 MAX_HISTORY_AFTER_SUMMARY = 40
-SUMMARY_KEEP_LAST_MESSAGES = 10
 SUMMARY_TARGET_TOKENS = 2500
 
 HISTORY_LIMIT_CANDIDATES = [
@@ -166,8 +164,6 @@ def build_summary_prompt_sections(
     messages_to_summarize,
     target_tokens
 ):
-    conversation_text = build_summary_text(messages_to_summarize)
-
     return {
         "system": SUMMARY_SYSTEM_PROMPT,
         "summary": current_summary or "",
@@ -176,16 +172,102 @@ def build_summary_prompt_sections(
         "context": "",
         "history": messages_to_summarize or [],
         "user_message": (
-            "Włącz widoczne elementy z pola SUMMARY oraz HISTORY do jednego "
-            "aktualnego, uporządkowanego streszczenia starszej części rozmowy. "
-            "Zachowaj decyzje, fakty, strukturę plików, błędy, poprawki, TODO "
-            "i preferencje użytkownika. "
-            f"Cel: maksymalnie około {target_tokens} tokenów.\n\n"
-            "Tekst rozmowy do streszczenia znajduje się w sekcji HISTORY.\n\n"
-            "Materiał pomocniczy z HISTORY w formie ciągłej:\n"
-            f"{conversation_text}"
+            "Połącz istniejące SUMMARY z wiadomościami widocznymi w HISTORY "
+            "w jedno aktualne streszczenie. HISTORY występuje w prompcie tylko "
+            "raz — nie przepisuj rozmowy, tylko zachowaj informacje potrzebne "
+            "do dalszej pracy. Nie pomijaj faktów tylko dlatego, że wydają się "
+            "drobne. Nie dopisuj informacji, których nie ma w materiale.\n\n"
+            "Zwróć wyłącznie streszczenie w poniższej strukturze:\n"
+            "## Aktualny stan projektu\n"
+            "## Fakty i wymagania użytkownika\n"
+            "## Podjęte decyzje\n"
+            "## Architektura i istotne pliki\n"
+            "## Wykonane poprawki i napotkane błędy\n"
+            "## Otwarte zadania i następne kroki\n"
+            "## Nierozstrzygnięte kwestie\n\n"
+            "Jeżeli dla sekcji nie ma danych, wpisz: Brak. "
+            f"Docelowa długość: maksymalnie około {target_tokens} tokenów."
         )
     }
+
+
+def _build_summary_candidate(current_summary, history, target_tokens):
+    sections = build_summary_prompt_sections(
+        current_summary=current_summary,
+        messages_to_summarize=history,
+        target_tokens=target_tokens
+    )
+    messages = build_messages_from_prompt_sections(sections)
+    return sections, messages, estimate_tokens(messages)
+
+
+def _avoid_splitting_user_assistant_pair(selected, all_messages):
+    if not selected or len(selected) >= len(all_messages):
+        return selected
+
+    last = selected[-1]
+    next_message = all_messages[len(selected)]
+
+    if last.get("role") == "user" and next_message.get("role") == "assistant":
+        return selected[:-1]
+
+    return selected
+
+
+def select_summary_batch(current_summary, messages, model, target_tokens):
+    """Wybiera największy początkowy fragment historii mieszczący się w budżecie."""
+    token_budget = get_usable_prompt_budget(model)
+
+    if not messages:
+        return [], None, [], 0, token_budget
+
+    low = 1
+    high = len(messages)
+    best_count = 0
+    best_sections = None
+    best_messages = []
+    best_tokens = 0
+
+    while low <= high:
+        middle = (low + high) // 2
+        sections, prompt_messages, tokens = _build_summary_candidate(
+            current_summary=current_summary,
+            history=messages[:middle],
+            target_tokens=target_tokens
+        )
+
+        if tokens <= token_budget:
+            best_count = middle
+            best_sections = sections
+            best_messages = prompt_messages
+            best_tokens = tokens
+            low = middle + 1
+        else:
+            high = middle - 1
+
+    if best_count == 0:
+        raise ValueError(
+            "Nawet pierwsza wiadomość historii nie mieści się w budżecie "
+            "promptu summary. Skróć istniejące SUMMARY albo wybierz model "
+            "z większym limitem."
+        )
+
+    selected = _avoid_splitting_user_assistant_pair(
+        messages[:best_count],
+        messages
+    )
+
+    if not selected:
+        selected = messages[:best_count]
+
+    if len(selected) != best_count:
+        best_sections, best_messages, best_tokens = _build_summary_candidate(
+            current_summary=current_summary,
+            history=selected,
+            target_tokens=target_tokens
+        )
+
+    return selected, best_sections, best_messages, best_tokens, token_budget
 
 
 def build_messages(
@@ -446,42 +528,18 @@ def build_prompt_for_conversation(
     return prompt_data
 
 
-def build_summary_text(messages):
-    lines = []
-
-    for msg in messages:
-        role = msg.get("role", "")
-        content = msg.get("content", "")
-
-        if role == "user":
-            label = "Użytkownik"
-        elif role == "assistant":
-            label = "Asystent"
-        else:
-            continue
-
-        lines.append(f"{label}: {content}")
-
-    return "\n\n".join(lines)
-
-
 def build_summary_prompt_for_conversation(
     conversation_id,
     model
 ):
     memory = load_prompt_memory(conversation_id)
 
-    # Ręczny przycisk "History → Summary" powinien streszczać realną
-    # historię rozmowy od ostatniego zapisanego summary, a nie tylko
-    # wiadomości starsze niż ostatnie SUMMARY_KEEP_LAST_MESSAGES. Ten drugi
-    # tryb jest dobry dla automatycznej kompresji, ale dla ręcznego przycisku
-    # dawał mylące "Brak starszej historii" przy krótszych rozmowach.
-    messages_to_summarize = get_messages_for_manual_summary(
+    all_messages = get_messages_for_manual_summary(
         conversation_id=conversation_id,
         after_id=memory["summarized_until_message_id"]
     )
 
-    if not messages_to_summarize:
+    if not all_messages:
         return {
             "messages": [],
             "history": [],
@@ -493,33 +551,39 @@ def build_summary_prompt_for_conversation(
             "summary_used": bool(memory["summary"]),
             "history_messages_loaded": 0,
             "history_messages_used": 0,
+            "summary_messages_remaining": 0,
+            "summary_has_more": False,
             "model": model,
         }
 
-    summary_until_message_id = max(
-        msg["id"] for msg in messages_to_summarize
+    selected, prompt_sections, messages, tokens_estimate, token_budget = (
+        select_summary_batch(
+            current_summary=memory["summary"],
+            messages=all_messages,
+            model=model,
+            target_tokens=SUMMARY_TARGET_TOKENS
+        )
     )
 
-    prompt_sections = build_summary_prompt_sections(
-        current_summary=memory["summary"],
-        messages_to_summarize=messages_to_summarize,
-        target_tokens=SUMMARY_TARGET_TOKENS
-    )
-
-    messages = build_messages_from_prompt_sections(prompt_sections)
+    summary_until_message_id = selected[-1]["id"]
+    remaining = len(all_messages) - len(selected)
 
     return {
         "messages": messages,
         "prompt_sections": prompt_sections,
-        "history": messages_to_summarize,
+        "history": selected,
         "summary": memory["summary"],
         "summary_until_message_id": summary_until_message_id,
-        "tokens_estimate": estimate_tokens(messages),
-        "token_budget": get_usable_prompt_budget(model),
-        "prompt_source": "summary_prompt_builder",
+        "tokens_estimate": tokens_estimate,
+        "token_budget": token_budget,
+        "prompt_source": "summary_prompt_builder_chunked",
         "summary_used": bool(memory["summary"]),
-        "history_messages_loaded": len(messages_to_summarize),
-        "history_messages_used": len(messages_to_summarize),
+        "history_messages_loaded": len(all_messages),
+        "history_messages_used": len(selected),
+        "summary_messages_remaining": remaining,
+        "summary_has_more": remaining > 0,
+        "summary_batch_first_message_id": selected[0]["id"],
+        "summary_batch_last_message_id": selected[-1]["id"],
         "summary_token_limit": SUMMARY_TARGET_TOKENS,
         "model": model,
     }
