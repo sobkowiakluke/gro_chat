@@ -213,3 +213,12 @@
 .hidden {
     display: none;
 }
+
+
+.prompt-persist-control, .prompt-dynamic-note {
+    margin-left: 10px;
+    font-size: 0.78rem;
+    font-weight: normal;
+    opacity: 0.8;
+}
+.prompt-persist-control input { vertical-align: middle; }

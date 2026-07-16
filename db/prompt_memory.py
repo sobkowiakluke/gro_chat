@@ -3,78 +3,83 @@ import json
 from db.connection import get_conn
 
 
+DURABLE_PROMPT_SECTIONS = (
+    "system",
+    "summary",
+    "facts",
+    "decisions",
+    "context",
+)
+
 DEFAULT_PROMPT_MEMORY = {
-    "system": "",
-    "summary": "",
-    "facts": "",
-    "decisions": "",
-    "context": "",
-    "history": [],
-    "user_message": ""
+    **{name: "" for name in DURABLE_PROMPT_SECTIONS},
+    "overrides": {name: False for name in DURABLE_PROMPT_SECTIONS},
 }
 
 
-def _normalize_history(history):
-    if not isinstance(history, list):
-        return []
+def _normalize_overrides(value):
+    value = value or {}
+    if isinstance(value, list):
+        value = {name: True for name in value}
+    if not isinstance(value, dict):
+        value = {}
+    return {name: bool(value.get(name, False)) for name in DURABLE_PROMPT_SECTIONS}
 
-    normalized = []
 
-    for msg in history:
-        if not isinstance(msg, dict):
-            continue
-
-        role = msg.get("role")
-        content = (msg.get("content") or "").strip()
-
-        if role in ["user", "assistant", "system"] and content:
-            normalized.append({
-                "role": role,
-                "content": content
-            })
-
+def normalize_prompt_memory(sections, overrides=None):
+    sections = sections or {}
+    normalized = {
+        name: str(sections.get(name) or "").strip()
+        for name in DURABLE_PROMPT_SECTIONS
+    }
+    normalized["overrides"] = _normalize_overrides(
+        overrides if overrides is not None else sections.get("overrides")
+    )
     return normalized
 
 
-def normalize_prompt_memory(sections):
-    sections = sections or {}
+def _decode_metadata(row):
+    raw = row.get("history_json") or ""
+    try:
+        decoded = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        decoded = None
 
+    if isinstance(decoded, dict) and decoded.get("version") == 2:
+        return _normalize_overrides(decoded.get("overrides"))
+
+    # Format legacy przechowywał tutaj kopię HISTORY. Historia jest od teraz
+    # zawsze dynamiczna. Zachowujemy tylko niepuste trwałe sekcje jako nadpisania.
     return {
-        "system": str(sections.get("system") or "").strip(),
-        "summary": str(sections.get("summary") or "").strip(),
-        "facts": str(sections.get("facts") or "").strip(),
-        "decisions": str(sections.get("decisions") or "").strip(),
-        "context": str(sections.get("context") or "").strip(),
-        "history": _normalize_history(sections.get("history") or []),
-        "user_message": str(sections.get("user_message") or "").strip()
+        "system": bool((row.get("system_prompt") or "").strip()),
+        "summary": bool((row.get("summary") or "").strip()),
+        "facts": bool((row.get("facts") or "").strip()),
+        "decisions": bool((row.get("decisions") or "").strip()),
+        "context": bool((row.get("context") or "").strip()),
     }
 
 
 def get_prompt_memory(conversation_id):
     conn = get_conn()
-    cur = conn.cursor(dictionary=True)
-
-    cur.execute(
-        """
-        SELECT *
-        FROM conversation_prompt_memory
-        WHERE conversation_id = %s
-        """,
-        (conversation_id,)
-    )
-
-    row = cur.fetchone()
-
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """
+                SELECT *
+                FROM conversation_prompt_memory
+                WHERE conversation_id = %s
+                """,
+                (conversation_id,),
+            )
+            row = cur.fetchone()
+        finally:
+            cur.close()
+    finally:
+        conn.close()
 
     if not row:
         return None
-
-    try:
-        history = json.loads(row.get("history_json") or "[]")
-    except json.JSONDecodeError:
-        history = []
 
     return normalize_prompt_memory({
         "system": row.get("system_prompt") or "",
@@ -82,73 +87,69 @@ def get_prompt_memory(conversation_id):
         "facts": row.get("facts") or "",
         "decisions": row.get("decisions") or "",
         "context": row.get("context") or "",
-        "history": history,
-        "user_message": row.get("user_message") or ""
-    })
+    }, overrides=_decode_metadata(row))
 
 
-def save_prompt_memory(conversation_id, sections):
-    memory = normalize_prompt_memory(sections)
+def save_prompt_memory(conversation_id, sections, overrides=None):
+    memory = normalize_prompt_memory(sections, overrides=overrides)
+    metadata = json.dumps({
+        "version": 2,
+        "overrides": memory["overrides"],
+    }, ensure_ascii=False)
 
     conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        INSERT INTO conversation_prompt_memory (
-            conversation_id,
-            system_prompt,
-            summary,
-            facts,
-            decisions,
-            context,
-            history_json,
-            user_message
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON DUPLICATE KEY UPDATE
-            system_prompt = VALUES(system_prompt),
-            summary = VALUES(summary),
-            facts = VALUES(facts),
-            decisions = VALUES(decisions),
-            context = VALUES(context),
-            history_json = VALUES(history_json),
-            user_message = VALUES(user_message),
-            updated_at = CURRENT_TIMESTAMP
-        """,
-        (
-            conversation_id,
-            memory["system"],
-            memory["summary"],
-            memory["facts"],
-            memory["decisions"],
-            memory["context"],
-            json.dumps(memory["history"], ensure_ascii=False),
-            memory["user_message"]
-        )
-    )
-
-    conn.commit()
-
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """
+                INSERT INTO conversation_prompt_memory (
+                    conversation_id, system_prompt, summary, facts, decisions,
+                    context, history_json, user_message
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, '')
+                ON DUPLICATE KEY UPDATE
+                    system_prompt = VALUES(system_prompt),
+                    summary = VALUES(summary),
+                    facts = VALUES(facts),
+                    decisions = VALUES(decisions),
+                    context = VALUES(context),
+                    history_json = VALUES(history_json),
+                    user_message = '',
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    conversation_id, memory["system"], memory["summary"],
+                    memory["facts"], memory["decisions"], memory["context"],
+                    metadata,
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+    finally:
+        conn.close()
 
     return memory
 
 
 def delete_prompt_memory(conversation_id):
     conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        DELETE FROM conversation_prompt_memory
-        WHERE conversation_id = %s
-        """,
-        (conversation_id,)
-    )
-
-    conn.commit()
-
-    cur.close()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "DELETE FROM conversation_prompt_memory WHERE conversation_id = %s",
+                (conversation_id,),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+    finally:
+        conn.close()

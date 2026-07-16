@@ -340,7 +340,8 @@ def chat():
         if prompt_sections and data.get("persist_prompt_memory"):
             save_prompt_memory(
                 conversation_id=conversation_id,
-                sections=prompt_sections
+                sections=prompt_sections,
+                overrides=data.get("prompt_memory_overrides") or {}
             )
 
         # Wiadomość użytkownika i odpowiedź asystenta są zapisywane dopiero
@@ -381,21 +382,10 @@ def chat():
 
             return jsonify(response)
 
+        # Ręczna edycja SUMMARY w zwykłym popupie dotyczy tylko tego requestu.
+        # Trwałe SUMMARY zapisuje wyłącznie jawna pamięć promptu, natomiast
+        # conversations.summary aktualizuje tylko tryb History → Summary.
         summary_persisted = False
-
-        if prompt_sections and prompt_sections.get("summary"):
-            update_conversation_summary(
-                conv_id=conversation_id,
-                summary=prompt_sections.get("summary"),
-                summarized_until_message_id=last_message_id_before_send
-            )
-            summary_persisted = True
-        elif edited_messages:
-            summary_persisted = persist_visible_summary_if_present(
-                conversation_id=conversation_id,
-                messages=final_messages,
-                summarized_until_message_id=last_message_id_before_send
-            )
 
         insert_message(
             conversation_id=conversation_id,
@@ -421,6 +411,9 @@ def chat():
             "reply": reply,
             "summary_persisted": summary_persisted
         }
+        response["prompt_memory_overrides"] = prompt_data.get(
+            "prompt_memory_overrides", {}
+        )
         response.update(build_prompt_meta(prompt_data))
 
         return jsonify(response)
@@ -496,6 +489,9 @@ def summary_context():
             "prompt_sections": prompt_data.get("prompt_sections"),
             "summary_mode": True
         }
+        response["prompt_memory_overrides"] = prompt_data.get(
+            "prompt_memory_overrides", {}
+        )
         response.update(build_prompt_meta(prompt_data))
 
         return jsonify(response)
@@ -559,16 +555,26 @@ def prompt_memory_save():
                     response[field] = value
             return jsonify(response), 400
 
+        overrides = data.get("prompt_memory_overrides") or {}
         saved = save_prompt_memory(
             conversation_id=conversation_id,
-            sections=prompt_sections
+            sections=prompt_sections,
+            overrides=overrides,
         )
 
-        final_messages = build_messages_from_prompt_sections(saved)
+        # Zapis pamięci nie zmienia bieżącej HISTORY ani USER MESSAGE.
+        effective = build_prompt_for_conversation(
+            conversation_id=conversation_id,
+            user_message=prompt_sections.get("user_message", ""),
+            context="",
+            model=model,
+        )
+        final_messages = effective["messages"]
 
         return jsonify({
             "saved": True,
-            "prompt_sections": saved,
+            "prompt_sections": effective["prompt_sections"],
+            "prompt_memory_overrides": saved["overrides"],
             "messages": final_messages,
             "tokens_estimate": tokens_estimate,
             "token_budget": token_budget,
@@ -736,6 +742,9 @@ def prompt_context():
                 context=context
             ),
         }
+        response["prompt_memory_overrides"] = prompt_data.get(
+            "prompt_memory_overrides", {}
+        )
         response.update(build_prompt_meta(prompt_data))
 
         return jsonify(response)

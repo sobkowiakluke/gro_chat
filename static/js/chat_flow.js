@@ -58,6 +58,7 @@ async function sendMsg() {
     if (finalPromptSections) {
         payload.prompt_sections = finalPromptSections;
         payload.persist_prompt_memory = promptMemoryDirty;
+        payload.prompt_memory_overrides = getPromptMemoryOverrides();
     } else if (finalMessages) {
         payload.messages = finalMessages;
     }

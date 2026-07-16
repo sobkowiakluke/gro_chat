@@ -60,7 +60,7 @@
         <div class="prompt-editor-grid">
 
             <section class="prompt-section prompt-section-system">
-                <label>SYSTEM</label>
+                <label>SYSTEM <span class="prompt-persist-control"><input type="checkbox" id="persistSystem" data-memory-section="system"> zachowaj dla kolejnych wiadomości</span></label>
                 <textarea
                     id="promptSystem"
                     spellcheck="false"
@@ -68,7 +68,7 @@
             </section>
 
             <section class="prompt-section prompt-section-summary">
-                <label>SUMMARY</label>
+                <label>SUMMARY <span class="prompt-persist-control"><input type="checkbox" id="persistSummary" data-memory-section="summary"> zachowaj dla kolejnych wiadomości</span></label>
                 <textarea
                     id="promptSummary"
                     spellcheck="false"
@@ -76,7 +76,7 @@
             </section>
 
             <section class="prompt-section prompt-section-context">
-                <label>CONTEXT</label>
+                <label>CONTEXT <span class="prompt-persist-control"><input type="checkbox" id="persistContext" data-memory-section="context"> zachowaj dla kolejnych wiadomości</span></label>
                 <textarea
                     id="promptContext"
                     spellcheck="false"
@@ -85,7 +85,7 @@
 
             <section class="prompt-section prompt-section-history">
                 <div class="prompt-section-header">
-                    <label>HISTORY</label>
+                    <label>HISTORY <span class="prompt-dynamic-note">tylko bieżące wysłanie</span></label>
                     <button
                         type="button"
                         onclick="addHistoryEditor('user', '')"
@@ -107,7 +107,7 @@
             </section>
 
             <section class="prompt-section prompt-section-user">
-                <label>USER MESSAGE</label>
+                <label>USER MESSAGE <span class="prompt-dynamic-note">tylko bieżące wysłanie</span></label>
                 <textarea
                     id="promptUser"
                     spellcheck="false"
@@ -115,7 +115,7 @@
             </section>
 
             <section class="prompt-section prompt-section-facts">
-                <label>FACTS</label>
+                <label>FACTS <span class="prompt-persist-control"><input type="checkbox" id="persistFacts" data-memory-section="facts"> zachowaj dla kolejnych wiadomości</span></label>
                 <textarea
                     id="promptFacts"
                     spellcheck="false"
@@ -123,7 +123,7 @@
             </section>
 
             <section class="prompt-section prompt-section-decisions">
-                <label>DECISIONS</label>
+                <label>DECISIONS <span class="prompt-persist-control"><input type="checkbox" id="persistDecisions" data-memory-section="decisions"> zachowaj dla kolejnych wiadomości</span></label>
                 <textarea
                     id="promptDecisions"
                     spellcheck="false"

@@ -328,48 +328,49 @@ def _load_dynamic_prompt_base(conversation_id, runtime_context=""):
 
 
 def load_prompt_memory(conversation_id, runtime_context=""):
-    """
-    Zwraca sekcje promptu do popupu.
+    """Łączy dynamiczny stan rozmowy z jawnymi trwałymi nadpisaniami.
 
-    Ważne: zapisany prompt_memory jest nakładką na stan rozmowy z DB,
-    a nie kompletnym zamiennikiem historii. Dzięki temu zapisanie samego
-    SYSTEM nie powoduje zniknięcia HISTORY z popupu.
-
-    Zasada:
-    - system/facts/decisions: jeśli zapisane, nadpisują bazę,
-    - summary: jeśli zapisane, nadpisuje summary rozmowy; jeśli puste,
-      bierzemy aktualne summary z conversations,
-    - context: zapisany context łączymy z bieżącym contextBox,
-    - history: jeśli zapisana historia nie jest pusta, używamy jej;
-      w przeciwnym razie bierzemy dynamiczną historię z messages,
-    - user_message: nie pochodzi z pamięci; ustawia ją bieżące pole input
-      w build_prompt_sections().
+    HISTORY i USER MESSAGE nigdy nie pochodzą z prompt_memory. Pusta wartość
+    trwałej sekcji jest respektowana, jeśli jej flaga override jest aktywna.
     """
     base = _load_dynamic_prompt_base(
         conversation_id=conversation_id,
-        runtime_context=runtime_context
+        runtime_context=runtime_context,
     )
-
     saved_memory = get_prompt_memory(conversation_id)
+    overrides = (saved_memory or {}).get("overrides") or {}
 
-    if not saved_memory:
-        return base
+    def resolved(name):
+        if saved_memory and overrides.get(name, False):
+            return saved_memory.get(name, "")
+        return base.get(name, "")
 
-    saved_history = saved_memory.get("history") or []
+    if overrides.get("context", False):
+        effective_context = merge_runtime_context(
+            saved_memory.get("context", ""),
+            runtime_context,
+        )
+    else:
+        effective_context = runtime_context or base.get("context", "")
 
     return {
-        "system": saved_memory.get("system") or base["system"],
-        "summary": saved_memory.get("summary") or base["summary"],
-        "facts": saved_memory.get("facts") or base["facts"],
-        "decisions": saved_memory.get("decisions") or base["decisions"],
-        "context": merge_runtime_context(
-            saved_memory.get("context"),
-            runtime_context
-        ) or base["context"],
-        "history": saved_history or base["history"],
+        "system": resolved("system"),
+        "summary": resolved("summary"),
+        "facts": resolved("facts"),
+        "decisions": resolved("decisions"),
+        "context": effective_context,
+        "history": base["history"],
         "user_message": "",
+        "prompt_memory_overrides": {
+            name: bool(overrides.get(name, False))
+            for name in ("system", "summary", "facts", "decisions", "context")
+        },
         "summarized_until_message_id": base["summarized_until_message_id"],
-        "source": "saved_prompt_memory_overlay"
+        "source": (
+            "durable_prompt_memory_overlay"
+            if any(overrides.values())
+            else base["source"]
+        ),
     }
 
 def build_prompt_within_budget(
@@ -500,7 +501,7 @@ def build_prompt_for_conversation(
         runtime_context=context
     )
 
-    effective_user_message = user_message or memory.get("user_message") or ""
+    effective_user_message = user_message or ""
 
     prompt_data = build_prompt_within_budget(
         model=model,
@@ -518,6 +519,7 @@ def build_prompt_for_conversation(
         "summarized_until_message_id"
     ]
     prompt_data["model"] = model
+    prompt_data["prompt_memory_overrides"] = memory.get("prompt_memory_overrides", {})
 
     prompt_data["prompt_sections"] = build_prompt_sections(
         prompt_data=prompt_data,
@@ -554,6 +556,7 @@ def build_summary_prompt_for_conversation(
             "summary_messages_remaining": 0,
             "summary_has_more": False,
             "model": model,
+            "prompt_memory_overrides": memory.get("prompt_memory_overrides", {}),
         }
 
     selected, prompt_sections, messages, tokens_estimate, token_budget = (
@@ -586,6 +589,7 @@ def build_summary_prompt_for_conversation(
         "summary_batch_last_message_id": selected[-1]["id"],
         "summary_token_limit": SUMMARY_TARGET_TOKENS,
         "model": model,
+        "prompt_memory_overrides": memory.get("prompt_memory_overrides", {}),
     }
 
 

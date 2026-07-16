@@ -4,6 +4,31 @@
 let promptMemoryDirty = false;
 let promptMemoryLoaded = false;
 
+const DURABLE_PROMPT_SECTIONS = ["system", "summary", "facts", "decisions", "context"];
+
+function getPromptMemoryOverrides() {
+    const result = {};
+    DURABLE_PROMPT_SECTIONS.forEach((name) => {
+        const el = document.querySelector(`[data-memory-section="${name}"]`);
+        result[name] = Boolean(el && el.checked);
+    });
+    return result;
+}
+
+function setPromptMemoryOverrides(overrides) {
+    overrides = overrides || {};
+    DURABLE_PROMPT_SECTIONS.forEach((name) => {
+        const el = document.querySelector(`[data-memory-section="${name}"]`);
+        if (el) el.checked = Boolean(overrides[name]);
+    });
+}
+
+function markPromptEditedOnly() {
+    if (typeof schedulePromptTokenEstimateUpdate === "function") {
+        schedulePromptTokenEstimateUpdate();
+    }
+}
+
 
 function markPromptMemoryDirty() {
     if (promptMemoryLoaded) {
@@ -50,6 +75,8 @@ function clearPromptSectionEditors() {
     if (historyList) {
         historyList.innerHTML = "";
     }
+
+    setPromptMemoryOverrides({});
 
     const meta = document.getElementById("promptMeta");
 
@@ -113,7 +140,7 @@ function addHistoryEditor(role, content) {
                 <option value="system">system</option>
             </select>
 
-            <button type="button" onclick="this.closest('.prompt-history-item').remove(); markPromptMemoryDirty();">
+            <button type="button" onclick="this.closest('.prompt-history-item').remove(); markPromptEditedOnly();">
                 Usuń
             </button>
         </div>
@@ -130,8 +157,8 @@ function addHistoryEditor(role, content) {
     roleSelect.value = role || "user";
     contentTextarea.value = content || "";
 
-    roleSelect.addEventListener("change", markPromptMemoryDirty);
-    contentTextarea.addEventListener("input", markPromptMemoryDirty);
+    roleSelect.addEventListener("change", markPromptEditedOnly);
+    contentTextarea.addEventListener("input", markPromptEditedOnly);
 
     historyList.appendChild(item);
 }
@@ -296,7 +323,7 @@ function fillPromptSectionEditors(messages) {
 }
 
 
-function fillPromptSectionEditorsFromSections(sections) {
+function fillPromptSectionEditorsFromSections(sections, memoryOverrides = null) {
     clearPromptSectionEditors();
 
     sections = sections || {};
@@ -338,6 +365,7 @@ function fillPromptSectionEditorsFromSections(sections) {
         );
     });
 
+    setPromptMemoryOverrides(memoryOverrides || sections.prompt_memory_overrides || {});
     attachPromptSectionDirtyListeners();
     resetPromptMemoryDirtyState();
 }
@@ -428,21 +456,26 @@ function getUserMessageFromPromptSections() {
 
 
 function attachPromptSectionDirtyListeners() {
-    [
-        "promptSystem",
-        "promptSummary",
-        "promptFacts",
-        "promptDecisions",
-        "promptContext",
-        "promptUser"
-    ].forEach((id) => {
+    const durableIds = [
+        "promptSystem", "promptSummary", "promptFacts",
+        "promptDecisions", "promptContext"
+    ];
+    durableIds.forEach((id) => {
         const el = document.getElementById(id);
-
-        if (!el || el.dataset.promptDirtyListener === "1") {
-            return;
-        }
-
+        if (!el || el.dataset.promptDirtyListener === "1") return;
         el.addEventListener("input", markPromptMemoryDirty);
+        el.dataset.promptDirtyListener = "1";
+    });
+
+    const user = document.getElementById("promptUser");
+    if (user && user.dataset.promptDirtyListener !== "1") {
+        user.addEventListener("input", markPromptEditedOnly);
+        user.dataset.promptDirtyListener = "1";
+    }
+
+    document.querySelectorAll("[data-memory-section]").forEach((el) => {
+        if (el.dataset.promptDirtyListener === "1") return;
+        el.addEventListener("change", markPromptMemoryDirty);
         el.dataset.promptDirtyListener = "1";
     });
 }
@@ -473,7 +506,8 @@ async function savePromptMemoryFromPopup() {
                 body: JSON.stringify({
                     conversation_id: conversationId,
                     model: payload.model,
-                    prompt_sections: promptSections
+                    prompt_sections: promptSections,
+                    prompt_memory_overrides: getPromptMemoryOverrides()
                 })
             }
         );
@@ -497,7 +531,10 @@ async function savePromptMemoryFromPopup() {
     }
 
     if (data.prompt_sections) {
-        fillPromptSectionEditorsFromSections(data.prompt_sections);
+        fillPromptSectionEditorsFromSections(
+            data.prompt_sections,
+            data.prompt_memory_overrides
+        );
     }
 
     updatePromptMeta(data);
@@ -673,7 +710,7 @@ async function compressHistoryToSummary() {
     summaryUntilMessageId = data.summary_until_message_id;
 
     if (data.prompt_sections) {
-        fillPromptSectionEditorsFromSections(data.prompt_sections);
+        fillPromptSectionEditorsFromSections(data.prompt_sections, data.prompt_memory_overrides);
     } else {
         fillPromptSectionEditors(editedMessages);
     }
@@ -731,7 +768,8 @@ async function sendEditedPrompt() {
                     prompt_sections: promptSections,
                     summary_mode: promptMode === "summary",
                     summary_until_message_id: summaryUntilMessageId,
-                    persist_prompt_memory: promptMemoryDirty
+                    persist_prompt_memory: promptMemoryDirty,
+                    prompt_memory_overrides: getPromptMemoryOverrides()
                 })
             }
         );
