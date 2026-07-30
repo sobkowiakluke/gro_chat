@@ -79,7 +79,11 @@ def build_messages_from_prompt_sections(sections):
     decisions = normalize_section_text(sections.get("decisions"))
     context = normalize_section_text(sections.get("context"))
     history = sections.get("history") or []
+    prompt_kind = normalize_section_text(sections.get("prompt_kind")) or "chat"
     user_message = normalize_section_text(sections.get("user_message"))
+    summary_instruction = normalize_section_text(
+        sections.get("summary_instruction")
+    )
 
     if system:
         for part in system.split("\n---\n"):
@@ -132,10 +136,16 @@ def build_messages_from_prompt_sections(sections):
                 "content": content
             })
 
-    if user_message:
+    final_user_content = (
+        summary_instruction
+        if prompt_kind == "summary"
+        else user_message
+    )
+
+    if final_user_content:
         messages.append({
             "role": "user",
-            "content": user_message
+            "content": final_user_content
         })
 
     return messages
@@ -149,13 +159,15 @@ def build_prompt_sections(prompt_data, user_message="", context=""):
     która zostałaby wysłana bez otwierania popupu.
     """
     return {
+        "prompt_kind": "chat",
         "system": prompt_data.get("system") or SYSTEM_PROMPT,
         "summary": prompt_data.get("summary") or "",
         "facts": prompt_data.get("facts") or "",
         "decisions": prompt_data.get("decisions") or "",
         "context": prompt_data.get("context") or context or "",
         "history": prompt_data.get("history") or [],
-        "user_message": user_message or prompt_data.get("user_message") or ""
+        "user_message": user_message or prompt_data.get("user_message") or "",
+        "summary_instruction": ""
     }
 
 
@@ -165,13 +177,15 @@ def build_summary_prompt_sections(
     target_tokens
 ):
     return {
+        "prompt_kind": "summary",
         "system": SUMMARY_SYSTEM_PROMPT,
         "summary": current_summary or "",
         "facts": "",
         "decisions": "",
         "context": "",
         "history": messages_to_summarize or [],
-        "user_message": (
+        "user_message": "",
+        "summary_instruction": (
             "Połącz istniejące SUMMARY z wiadomościami widocznymi w HISTORY "
             "w jedno aktualne streszczenie. HISTORY występuje w prompcie tylko "
             "raz — nie przepisuj rozmowy, tylko zachowaj informacje potrzebne "

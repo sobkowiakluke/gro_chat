@@ -37,7 +37,7 @@ async function sendMsg() {
             return;
         }
 
-        if (!messageToSaveAndDisplay) {
+        if (!messageToSaveAndDisplay && promptMode !== "summary") {
             alert("Brak wiadomości USER MESSAGE w prompcie.");
             return;
         }
@@ -111,7 +111,7 @@ async function sendMsg() {
         );
 
         editedMessages = null;
-        promptMode = "chat";
+        setPromptEditorKind("chat");
         summaryUntilMessageId = null;
         promptMemoryDirty = false;
         updatePromptMeta(data);
@@ -231,7 +231,7 @@ async function toggleContext() {
     }
 
     editedMessages = data.messages;
-    promptMode = "chat";
+    setPromptEditorKind("chat");
     summaryUntilMessageId = null;
 
     if (data.prompt_sections) {
@@ -270,7 +270,7 @@ async function closeContextModal() {
     }
 
     if (promptMode === "summary") {
-        promptMode = "chat";
+        setPromptEditorKind("chat");
         summaryUntilMessageId = null;
         editedMessages = null;
     }

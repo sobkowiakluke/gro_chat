@@ -259,10 +259,19 @@ def chat():
         if not user_message and edited_messages:
             user_message = get_last_user_message(edited_messages)
 
-        if not user_message:
+        if not user_message and not summary_mode:
             return jsonify({
                 "reply": "Brak wiadomości do wysłania."
             }), 400
+
+        if summary_mode and prompt_sections:
+            summary_instruction = (
+                prompt_sections.get("summary_instruction") or ""
+            ).strip()
+            if not summary_instruction:
+                return jsonify({
+                    "reply": "Brak instrukcji SUMMARY INSTRUCTION w prompcie."
+                }), 400
 
         last_message_id_before_send = get_last_message_id(
             conversation_id
@@ -535,6 +544,7 @@ def summary_context():
         response = {
             "messages": prompt_data["messages"],
             "prompt_sections": prompt_data.get("prompt_sections"),
+            "prompt_kind": "summary",
             "summary_mode": True
         }
         response["prompt_memory_overrides"] = prompt_data.get(
@@ -774,6 +784,7 @@ def prompt_context():
             )
 
         response = {
+            "prompt_kind": "chat",
             "system_prompt": None,
             "summary": prompt_data.get("summary", ""),
             "facts": prompt_data.get("facts", ""),

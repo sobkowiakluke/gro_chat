@@ -278,6 +278,7 @@ function splitMessagesIntoSections(messages) {
 
 function fillPromptSectionEditors(messages) {
     clearPromptSectionEditors();
+    setPromptEditorKind("chat");
 
     const sections = splitMessagesIntoSections(messages);
 
@@ -323,10 +324,24 @@ function fillPromptSectionEditors(messages) {
 }
 
 
+
+function setPromptEditorKind(kind) {
+    const normalizedKind = kind === "summary" ? "summary" : "chat";
+    promptMode = normalizedKind;
+
+    const label = document.getElementById("promptUserLabel");
+    if (label) {
+        label.innerHTML = normalizedKind === "summary"
+            ? 'SUMMARY INSTRUCTION <span class="prompt-dynamic-note">tylko bieżące streszczanie</span>'
+            : 'USER MESSAGE <span class="prompt-dynamic-note">tylko bieżące wysłanie</span>';
+    }
+}
+
 function fillPromptSectionEditorsFromSections(sections, memoryOverrides = null) {
     clearPromptSectionEditors();
 
     sections = sections || {};
+    setPromptEditorKind(sections.prompt_kind || "chat");
 
     setPromptTextareaValue(
         "promptSystem",
@@ -355,7 +370,9 @@ function fillPromptSectionEditorsFromSections(sections, memoryOverrides = null) 
 
     setPromptTextareaValue(
         "promptUser",
-        sections.user_message || ""
+        sections.prompt_kind === "summary"
+            ? (sections.summary_instruction || "")
+            : (sections.user_message || "")
     );
 
     (sections.history || []).forEach((msg) => {
@@ -372,14 +389,19 @@ function fillPromptSectionEditorsFromSections(sections, memoryOverrides = null) 
 
 
 function buildPromptSectionsFromEditors() {
+    const editorValue = getPromptTextareaValue("promptUser").trim();
+    const isSummary = promptMode === "summary";
+
     return {
+        prompt_kind: isSummary ? "summary" : "chat",
         system: getPromptTextareaValue("promptSystem").trim(),
         summary: getPromptTextareaValue("promptSummary").trim(),
         facts: getPromptTextareaValue("promptFacts").trim(),
         decisions: getPromptTextareaValue("promptDecisions").trim(),
         context: getPromptTextareaValue("promptContext").trim(),
         history: getHistoryMessagesFromEditors(),
-        user_message: getPromptTextareaValue("promptUser").trim()
+        user_message: isSummary ? "" : editorValue,
+        summary_instruction: isSummary ? editorValue : ""
     };
 }
 
@@ -392,7 +414,7 @@ function buildMessagesFromPromptSections() {
     const facts = getPromptTextareaValue("promptFacts").trim();
     const decisions = getPromptTextareaValue("promptDecisions").trim();
     const context = getPromptTextareaValue("promptContext").trim();
-    const user = getPromptTextareaValue("promptUser").trim();
+    const finalInstruction = getPromptTextareaValue("promptUser").trim();
 
     if (system) {
         system
@@ -439,10 +461,10 @@ function buildMessagesFromPromptSections() {
         messages.push(msg);
     });
 
-    if (user) {
+    if (finalInstruction) {
         messages.push({
             role: "user",
-            content: user
+            content: finalInstruction
         });
     }
 
@@ -451,6 +473,10 @@ function buildMessagesFromPromptSections() {
 
 
 function getUserMessageFromPromptSections() {
+    if (promptMode === "summary") {
+        return "";
+    }
+
     return getPromptTextareaValue("promptUser").trim();
 }
 
@@ -706,7 +732,7 @@ async function compressHistoryToSummary() {
     }
 
     editedMessages = data.messages;
-    promptMode = "summary";
+    setPromptEditorKind("summary");
     summaryUntilMessageId = data.summary_until_message_id;
 
     if (data.prompt_sections) {
@@ -799,7 +825,7 @@ async function sendEditedPrompt() {
             data.summary || data.reply || ""
         );
 
-        promptMode = "chat";
+        setPromptEditorKind("chat");
         summaryUntilMessageId = null;
 
         updatePromptMeta(data);
