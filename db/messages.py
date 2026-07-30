@@ -1,39 +1,6 @@
 from db.connection import get_conn
 
 
-def insert_message(
-    conversation_id,
-    role,
-    content,
-    request_id=None
-):
-    conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute("""
-        INSERT INTO messages (
-            conversation_id,
-            request_id,
-            role,
-            content
-        )
-        VALUES (%s, %s, %s, %s)
-    """, (
-        conversation_id,
-        request_id,
-        role,
-        content
-    ))
-
-    conn.commit()
-    message_id = cur.lastrowid
-
-    cur.close()
-    conn.close()
-
-    return message_id
-
-
 def get_messages(conversation_id):
     conn = get_conn()
     cur = conn.cursor(dictionary=True)
