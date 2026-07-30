@@ -154,18 +154,66 @@ def complete_chat_request(
         conn.close()
 
 
-def complete_llm_request(
+def complete_summary_request(
     request_id,
+    summary,
+    summarized_until_message_id,
     tokens_in=None,
     tokens_out=None,
     latency_ms=None,
     api_request_id=None,
 ):
-    """Finish a non-chat request, for example conversation summarization."""
+    """Atomically save a generated summary and finish its LLM request."""
     conn = get_conn()
     try:
         cur = conn.cursor()
         try:
+            cur.execute(
+                """
+                SELECT conversation_id, request_kind, status
+                FROM llm_requests
+                WHERE id = %s
+                FOR UPDATE
+                """,
+                (request_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise ValueError(f"Nie istnieje llm_request id={request_id}.")
+
+            conversation_id, request_kind, status = row
+
+            if request_kind != "summary":
+                raise ValueError(
+                    f"llm_request id={request_id} nie jest żądaniem summary."
+                )
+
+            if status != "pending":
+                raise ValueError(
+                    f"llm_request id={request_id} nie ma statusu pending."
+                )
+
+            cur.execute(
+                """
+                UPDATE conversations
+                SET
+                    summary = %s,
+                    summarized_until_message_id = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                  AND is_deleted = FALSE
+                """,
+                (
+                    summary,
+                    summarized_until_message_id,
+                    conversation_id,
+                ),
+            )
+            if cur.rowcount != 1:
+                raise ValueError(
+                    f"Nie istnieje aktywna rozmowa id={conversation_id}."
+                )
+
             cur.execute(
                 """
                 UPDATE llm_requests
@@ -191,6 +239,7 @@ def complete_llm_request(
                 raise ValueError(
                     f"llm_request id={request_id} nie ma statusu pending."
                 )
+
             conn.commit()
         except Exception:
             conn.rollback()

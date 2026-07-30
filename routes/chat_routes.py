@@ -36,7 +36,7 @@ from db.messages import (
 from db.llm_requests import (
     create_llm_request,
     complete_chat_request,
-    complete_llm_request,
+    complete_summary_request,
     fail_llm_request
 )
 
@@ -375,16 +375,12 @@ def chat():
         if summary_mode:
             reply = validate_summary_reply(reply)
 
-            # Summary i marker są zapisywane jednym UPDATE dopiero po poprawnej
-            # odpowiedzi modelu i walidacji struktury wyniku.
-            update_conversation_summary(
-                conv_id=conversation_id,
-                summary=reply,
-                summarized_until_message_id=summary_until_message_id
-            )
-
-            complete_llm_request(
+            # Summary, marker oraz zakończenie llm_request są zapisywane
+            # atomowo w jednej transakcji.
+            complete_summary_request(
                 request_id=llm_request_id,
+                summary=reply,
+                summarized_until_message_id=summary_until_message_id,
                 tokens_in=llm_result.get("tokens_in"),
                 tokens_out=llm_result.get("tokens_out"),
                 latency_ms=llm_result.get("latency_ms"),
