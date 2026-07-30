@@ -4,7 +4,7 @@ from flask import (
     jsonify
 )
 
-import json
+import time
 import traceback
 
 from services.groq_service import (
@@ -29,13 +29,18 @@ from db.prompt_memory import (
 )
 
 from db.messages import (
-    insert_message,
     get_last_message_id,
     count_messages_after_id
 )
 
+from db.llm_requests import (
+    create_llm_request,
+    complete_chat_request,
+    complete_llm_request,
+    fail_llm_request
+)
+
 from db.conversations import (
-    touch_conversation,
     update_conversation_summary,
     get_conversation_summary
 )
@@ -221,6 +226,10 @@ def validate_summary_reply(reply):
     methods=["POST"]
 )
 def chat():
+    llm_request_id = None
+    llm_request_finalized = False
+    llm_request_started_at = None
+
     try:
         data = request.json or {}
 
@@ -344,12 +353,24 @@ def chat():
                 overrides=data.get("prompt_memory_overrides") or {}
             )
 
-        # Wiadomość użytkownika i odpowiedź asystenta są zapisywane dopiero
-        # po poprawnej odpowiedzi Groq. Przy błędzie API historia pozostaje bez zmian.
-        reply = send_chat(
+        # Każde rzeczywiste wywołanie API otrzymuje własny rekord audytowy.
+        # Dokładny prompt jest zapisywany przed wysłaniem, również gdy API zwróci błąd.
+        llm_request_id = create_llm_request(
+            conversation_id=conversation_id,
+            provider="groq",
+            model=model,
+            request_messages=final_messages,
+            request_kind="summary" if summary_mode else "chat",
+            prompt_source=prompt_data.get("prompt_source"),
+            tokens_estimate=prompt_data.get("tokens_estimate")
+        )
+        llm_request_started_at = time.monotonic()
+
+        llm_result = send_chat(
             model=model,
             messages=final_messages
         )
+        reply = llm_result["content"]
 
         if summary_mode:
             reply = validate_summary_reply(reply)
@@ -361,6 +382,15 @@ def chat():
                 summary=reply,
                 summarized_until_message_id=summary_until_message_id
             )
+
+            complete_llm_request(
+                request_id=llm_request_id,
+                tokens_in=llm_result.get("tokens_in"),
+                tokens_out=llm_result.get("tokens_out"),
+                latency_ms=llm_result.get("latency_ms"),
+                api_request_id=llm_result.get("api_request_id")
+            )
+            llm_request_finalized = True
 
             remaining_messages = count_messages_after_id(
                 conversation_id=conversation_id,
@@ -387,25 +417,16 @@ def chat():
         # conversations.summary aktualizuje tylko tryb History → Summary.
         summary_persisted = False
 
-        insert_message(
-            conversation_id=conversation_id,
-            role="user",
-            content=user_message
+        complete_chat_request(
+            request_id=llm_request_id,
+            user_message=user_message,
+            assistant_message=reply,
+            tokens_in=llm_result.get("tokens_in"),
+            tokens_out=llm_result.get("tokens_out"),
+            latency_ms=llm_result.get("latency_ms"),
+            api_request_id=llm_result.get("api_request_id")
         )
-
-        insert_message(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=reply,
-            raw_prompt=json.dumps(
-                final_messages,
-                ensure_ascii=False
-            )
-        )
-
-        touch_conversation(
-            conversation_id
-        )
+        llm_request_finalized = True
 
         response = {
             "reply": reply,
@@ -419,6 +440,21 @@ def chat():
         return jsonify(response)
 
     except ValueError as e:
+        if llm_request_id and not llm_request_finalized:
+            elapsed_ms = None
+            if llm_request_started_at is not None:
+                elapsed_ms = round((time.monotonic() - llm_request_started_at) * 1000)
+            try:
+                fail_llm_request(
+                    request_id=llm_request_id,
+                    error_message=e,
+                    error_type=type(e).__name__,
+                    latency_ms=elapsed_ms
+                )
+                llm_request_finalized = True
+            except Exception:
+                print(traceback.format_exc())
+
         response = {
             "reply": "Nie można wysłać promptu.",
             "error": str(e)
@@ -440,6 +476,22 @@ def chat():
         return jsonify(response), 400
 
     except Exception as e:
+        if llm_request_id and not llm_request_finalized:
+            elapsed_ms = None
+            if llm_request_started_at is not None:
+                elapsed_ms = round((time.monotonic() - llm_request_started_at) * 1000)
+            try:
+                fail_llm_request(
+                    request_id=llm_request_id,
+                    error_message=e,
+                    error_type=type(e).__name__,
+                    error_code=getattr(e, "code", None),
+                    latency_ms=elapsed_ms
+                )
+                llm_request_finalized = True
+            except Exception:
+                print(traceback.format_exc())
+
         print(str(e))
         print(traceback.format_exc())
 

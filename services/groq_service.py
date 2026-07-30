@@ -190,13 +190,20 @@ def send_chat(model, messages):
 
     debug("FINAL MESSAGES SENT TO GROQ", messages)
 
+    started_at = time.monotonic()
     completion = client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=0.7
     )
+    latency_ms = round((time.monotonic() - started_at) * 1000)
 
     reply = completion.choices[0].message.content or ""
+    usage = getattr(completion, "usage", None)
+
+    tokens_in = getattr(usage, "prompt_tokens", None) if usage else None
+    tokens_out = getattr(usage, "completion_tokens", None) if usage else None
+    api_request_id = getattr(completion, "id", None)
 
     print("RAW REPLY:", repr(reply))
     print("NEWLINES:", reply.count("\n"))
@@ -204,4 +211,10 @@ def send_chat(model, messages):
 
     debug("GROQ RESPONSE", reply)
 
-    return reply
+    return {
+        "content": reply,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "latency_ms": latency_ms,
+        "api_request_id": api_request_id,
+    }

@@ -5,7 +5,7 @@ def insert_message(
     conversation_id,
     role,
     content,
-    raw_prompt=None
+    request_id=None
 ):
     conn = get_conn()
     cur = conn.cursor()
@@ -13,16 +13,16 @@ def insert_message(
     cur.execute("""
         INSERT INTO messages (
             conversation_id,
+            request_id,
             role,
-            content,
-            raw_prompt
+            content
         )
         VALUES (%s, %s, %s, %s)
     """, (
         conversation_id,
+        request_id,
         role,
-        content,
-        raw_prompt
+        content
     ))
 
     conn.commit()
