@@ -265,13 +265,24 @@ def chat():
             }), 400
 
         if summary_mode and prompt_sections:
+            # Starsza wersja frontendu umieszczała instrukcję summary w
+            # user_message. Normalizujemy payload, aby tryb summary nie
+            # zależał od cache przeglądarki ani od samej etykiety pola.
             summary_instruction = (
-                prompt_sections.get("summary_instruction") or ""
+                prompt_sections.get("summary_instruction")
+                or prompt_sections.get("user_message")
+                or ""
             ).strip()
+
             if not summary_instruction:
                 return jsonify({
                     "reply": "Brak instrukcji SUMMARY INSTRUCTION w prompcie."
                 }), 400
+
+            prompt_sections = dict(prompt_sections)
+            prompt_sections["prompt_kind"] = "summary"
+            prompt_sections["summary_instruction"] = summary_instruction
+            prompt_sections["user_message"] = ""
 
         last_message_id_before_send = get_last_message_id(
             conversation_id

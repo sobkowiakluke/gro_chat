@@ -329,6 +329,11 @@ function setPromptEditorKind(kind) {
     const normalizedKind = kind === "summary" ? "summary" : "chat";
     promptMode = normalizedKind;
 
+    const modal = document.getElementById("contextModal");
+    if (modal) {
+        modal.dataset.promptKind = normalizedKind;
+    }
+
     const label = document.getElementById("promptUserLabel");
     if (label) {
         label.innerHTML = normalizedKind === "summary"
@@ -388,9 +393,21 @@ function fillPromptSectionEditorsFromSections(sections, memoryOverrides = null) 
 }
 
 
+function getActivePromptKind() {
+    const modal = document.getElementById("contextModal");
+    const modalKind = modal && modal.dataset.promptKind;
+
+    if (modalKind === "summary" || modalKind === "chat") {
+        return modalKind;
+    }
+
+    return promptMode === "summary" ? "summary" : "chat";
+}
+
+
 function buildPromptSectionsFromEditors() {
     const editorValue = getPromptTextareaValue("promptUser").trim();
-    const isSummary = promptMode === "summary";
+    const isSummary = getActivePromptKind() === "summary";
 
     return {
         prompt_kind: isSummary ? "summary" : "chat",
@@ -473,7 +490,7 @@ function buildMessagesFromPromptSections() {
 
 
 function getUserMessageFromPromptSections() {
-    if (promptMode === "summary") {
+    if (getActivePromptKind() === "summary") {
         return "";
     }
 
@@ -792,7 +809,7 @@ async function sendEditedPrompt() {
                     model: model,
                     message: userMessage,
                     prompt_sections: promptSections,
-                    summary_mode: promptMode === "summary",
+                    summary_mode: getActivePromptKind() === "summary",
                     summary_until_message_id: summaryUntilMessageId,
                     persist_prompt_memory: promptMemoryDirty,
                     prompt_memory_overrides: getPromptMemoryOverrides()

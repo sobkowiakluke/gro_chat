@@ -63,7 +63,7 @@ async function sendMsg() {
         payload.messages = finalMessages;
     }
 
-    if (finalMessages && promptMode === "summary") {
+    if (finalMessages && getActivePromptKind() === "summary") {
         payload.summary_mode = true;
         payload.summary_until_message_id = summaryUntilMessageId;
     }
@@ -104,7 +104,7 @@ async function sendMsg() {
         return;
     }
 
-    if (promptMode === "summary" || data.summary_updated) {
+    if (getActivePromptKind() === "summary" || data.summary_updated) {
         setPromptTextareaValue(
             "promptSummary",
             data.summary || ""
@@ -249,7 +249,7 @@ async function toggleContext() {
 async function closeContextModal() {
     const modal = document.getElementById("contextModal");
 
-    if (promptMode !== "summary" && promptMemoryDirty) {
+    if (getActivePromptKind() !== "summary" && promptMemoryDirty) {
         const shouldSave = confirm(
             "Prompt został zmodyfikowany. Zapisać zmiany jako pamięć tej rozmowy?"
         );
@@ -269,7 +269,7 @@ async function closeContextModal() {
         modal.classList.add("hidden");
     }
 
-    if (promptMode === "summary") {
+    if (getActivePromptKind() === "summary") {
         setPromptEditorKind("chat");
         summaryUntilMessageId = null;
         editedMessages = null;
